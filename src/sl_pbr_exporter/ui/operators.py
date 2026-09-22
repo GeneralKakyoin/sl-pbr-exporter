@@ -67,7 +67,8 @@ def execute_material_export(
     res = int(props.texture_resolution)
     out_dir_raw = bpy.path.abspath(props.output_dir)
     out_dir = Path(out_dir_raw) if out_dir_raw else Path.cwd() / "exports" / "pbr"
-    mat_folder = out_dir / material.name
+    materials_dir = out_dir / "MATERIALS"
+    textures_dir = out_dir / "TEXTURES"
 
     # 1. Inspect
     analysis = inspect_material(
@@ -136,7 +137,7 @@ def execute_material_export(
             alpha_mode=analysis.alpha_mode,
             alpha_cutoff=props.alpha_cutoff,
         )
-        glb_file = mat_folder / f"{material.name}.glb"
+        glb_file = materials_dir / f"{material.name}.glb"
         export_standalone_glb(material.name, synth_mat, glb_file)
         results["glb"] = glb_file
 
@@ -145,10 +146,9 @@ def execute_material_export(
 
     # 5. Target B: Loose Textures
     if props.export_target in ("BOTH", "TEXTURES_ONLY"):
-        tex_dir = mat_folder / "textures"
         saved = save_loose_textures(
             material_name=material.name,
-            textures_dir=tex_dir,
+            textures_dir=textures_dir,
             base_color_img=base_color_img,
             orm_img=orm_img,
             normal_img=normal_img,

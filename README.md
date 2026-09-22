@@ -85,13 +85,15 @@ Exported files are organized into dedicated material subdirectories:
 
 ```text
 exports/pbr/
-└── Material_Wood/
-    ├── Material_Wood.glb              # Second Life glTF PBR container
-    └── textures/
-        ├── Material_Wood_BaseColor.png
-        ├── Material_Wood_ORM.png
-        ├── Material_Wood_Normal.png
-        └── Material_Wood_Emissive.png
+├── MATERIALS/
+│   ├── Material_Wood.glb              # Second Life glTF PBR container
+│   └── Material_Metal.glb
+└── TEXTURES/
+    ├── Material_Wood_BaseColor.png
+    ├── Material_Wood_ORM.png
+    ├── Material_Wood_Normal.png
+    ├── Material_Wood_Emissive.png
+    └── Material_Metal_BaseColor.png
 ```
 
 ---
