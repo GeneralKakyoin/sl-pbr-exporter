@@ -1,0 +1,36 @@
+name: Build & Release Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Package Addon & Extension
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build Dual Release Packages
+        run: python scripts/build_packages.py
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/sl_pbr_exporter-3.6-addon.zip
+            dist/sl_pbr_exporter-4.2-extension.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

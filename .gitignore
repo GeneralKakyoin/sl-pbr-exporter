@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Blender temporary files
+*.blend1
+*.blend2
+*.blend@
+
+# Build & packaging artifacts
+/build/
+/dist/
+*.zip
+*.egg-info/
+.eggs/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test & lint caches
+.pytest_cache/
+.ruff_cache/
+/coverage/
+.coverage
+
+# Bake caches and local exports
+/exports/
+/bake_cache/
+/tmp/

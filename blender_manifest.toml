@@ -1,0 +1,20 @@
+schema_version = "1.0.0"
+
+id = "sl_pbr_exporter"
+version = "0.1.0"
+name = "Second Life PBR Exporter"
+tagline = "Automate baking, ORM packing, and glTF PBR material export for Second Life"
+maintainer = "Antigravity"
+type = "add-on"
+
+# Permissions required for file input/output
+permissions = ["files"]
+
+# Minimum Blender version for extension platform
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:MIT",
+]
+
+tags = ["Import-Export", "Material", "PBR", "Game Engine"]

@@ -1,0 +1,45 @@
+name: Lint & Headless Test
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    name: Ruff Linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff Lint
+        run: ruff check src/ scripts/
+
+  test-blender:
+    name: Headless Blender Test (${{ matrix.blender-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ["3.6.14", "4.2.1"]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Blender
+        uses: blender-actions/setup-blender@v3
+        with:
+          blender-version: ${{ matrix.blender-version }}
+
+      - name: Run Headless Tests
+        run: blender --background --factory-startup --python tests/run_tests.py

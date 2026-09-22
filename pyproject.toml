@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sl-pbr-exporter"
+version = "0.1.0"
+description = "Blender to Second Life glTF 2.0 PBR Material Exporter (Blender 3.6 LTS & 4.2+ Extension)"
+authors = [{ name = "Antigravity", email = "antigravity@google.com" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["blender", "secondlife", "pbr", "gltf", "orm", "baking"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
