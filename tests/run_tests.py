@@ -16,6 +16,11 @@ if str(SRC_DIR) not in sys.path:
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
+# Ensure we unload any pre-installed add-on from Blender's user preferences
+for mod_name in list(sys.modules.keys()):
+    if mod_name == "sl_pbr_exporter" or mod_name.startswith("sl_pbr_exporter."):
+        del sys.modules[mod_name]
+
 import bpy
 import sl_pbr_exporter
 

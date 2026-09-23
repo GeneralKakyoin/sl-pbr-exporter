@@ -253,8 +253,76 @@ class TestImporter(unittest.TestCase):
         self.assertIsNotNone(m4)
         self.assertEqual(m4["diffuse"], "textures/HEAD_lel_evox_AVALON_4_0/4_diffuse.png")
 
+    def test_ensure_object_mode_and_deselect_from_pose_mode(self):
+        """Verify deselect_all_objects safely switches from POSE mode to OBJECT mode and clears selection."""
+        from sl_pbr_exporter.config import deselect_all_objects, ensure_object_mode
+
+        arm_data = bpy.data.armatures.new("PoseTestArm")
+        arm_obj = bpy.data.objects.new("PoseTestArm", arm_data)
+        bpy.context.scene.collection.objects.link(arm_obj)
+        bpy.context.view_layer.objects.active = arm_obj
+        arm_obj.select_set(True)
+
+        bpy.ops.object.mode_set(mode="POSE")
+        self.assertEqual(bpy.context.mode, "POSE")
+
+        # In POSE mode, standard bpy.ops.object.select_all.poll() returns False
+        self.assertFalse(bpy.ops.object.select_all.poll())
+
+        # Our context-agnostic deselect_all_objects must not raise any RuntimeError
+        deselect_all_objects()
+        self.assertEqual(bpy.context.mode, "OBJECT")
+        self.assertEqual(len(bpy.context.selected_objects), 0)
+
+        bpy.data.objects.remove(arm_obj, do_unlink=True)
+        bpy.data.armatures.remove(arm_data, do_unlink=True)
+
+    def test_ensure_object_mode_and_deselect_from_edit_mode(self):
+        """Verify deselect_all_objects safely switches from EDIT mode to OBJECT mode and clears selection."""
+        from sl_pbr_exporter.config import deselect_all_objects, ensure_object_mode
+
+        mesh = bpy.data.meshes.new("EditTestMesh")
+        mesh.from_pydata([(0, 0, 0), (1, 0, 0), (0, 1, 0)], [], [(0, 1, 2)])
+        mesh.update()
+        obj = bpy.data.objects.new("EditTestObj", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        bpy.ops.object.mode_set(mode="EDIT")
+        self.assertEqual(bpy.context.mode, "EDIT_MESH")
+
+        deselect_all_objects()
+        self.assertEqual(bpy.context.mode, "OBJECT")
+        self.assertEqual(len(bpy.context.selected_objects), 0)
+
+        bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.meshes.remove(mesh, do_unlink=True)
+
+    def test_load_selected_items_safe_in_pose_mode(self):
+        """Verify SL_OT_LoadSelectedItems does not crash on poll or context when called while scene is in POSE mode."""
+        arm_data = bpy.data.armatures.new("RigAvatar")
+        arm_obj = bpy.data.objects.new("Avatar", arm_data)
+        bpy.context.scene.collection.objects.link(arm_obj)
+        bpy.context.view_layer.objects.active = arm_obj
+        arm_obj.select_set(True)
+
+        bpy.ops.object.mode_set(mode="POSE")
+        self.assertEqual(bpy.context.mode, "POSE")
+
+        # Invoke load_selected_items - should return CANCELLED cleanly without crashing
+        res = bpy.ops.sl_suite.load_selected_items()
+        self.assertEqual(res, {"CANCELLED"})
+
+        # Scene mode should now be safely OBJECT
+        self.assertEqual(bpy.context.mode, "OBJECT")
+
+        bpy.data.objects.remove(arm_obj, do_unlink=True)
+        bpy.data.armatures.remove(arm_data, do_unlink=True)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

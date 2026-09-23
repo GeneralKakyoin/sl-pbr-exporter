@@ -12,6 +12,8 @@ from ..config import (
     PASS_METALLIC,
     PASS_NORMAL,
     PASS_ROUGHNESS,
+    deselect_all_objects,
+    ensure_object_mode,
     get_principled_socket,
 )
 from ..utils.context import PreserveRenderSettings, TemporaryBakeMaterial
@@ -77,7 +79,8 @@ class BakeSession:
         scene = bpy.context.scene
 
         # Ensure target object is active and selected
-        bpy.ops.object.select_all(action="DESELECT")
+        ensure_object_mode()
+        deselect_all_objects()
         self.target_object.select_set(True)
         bpy.context.view_layer.objects.active = self.target_object
 

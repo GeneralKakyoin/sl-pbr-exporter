@@ -149,3 +149,27 @@ def set_material_blend_method(mat: bpy.types.Material, blend_method: str) -> Non
         except (TypeError, ValueError):
             pass
 
+
+def ensure_object_mode() -> None:
+    """Ensure Blender is in OBJECT mode safely without failing if in POSE or EDIT mode."""
+    if hasattr(bpy.context, "mode") and bpy.context.mode != "OBJECT":
+        try:
+            if hasattr(bpy.ops.object, "mode_set") and bpy.ops.object.mode_set.poll():
+                bpy.ops.object.mode_set(mode="OBJECT")
+        except Exception:
+            pass
+
+
+def deselect_all_objects() -> None:
+    """Context-agnostic object deselection that never fails operator poll checks."""
+    ensure_object_mode()
+    try:
+        for obj in list(bpy.context.selected_objects):
+            try:
+                obj.select_set(False)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+

@@ -5,6 +5,8 @@ from typing import Any, Dict, Optional
 import xml.etree.ElementTree as ET
 import bpy
 
+from ..config import deselect_all_objects, ensure_object_mode
+
 
 def find_shape_xml(search_dir: Path) -> Optional[Path]:
     """Search for a Second Life shape XML file in the given directory or its parent."""
@@ -77,7 +79,8 @@ def apply_shape_xml(
         try:
             # If armature given, select it
             if devkit_arm and devkit_arm.name in bpy.context.scene.objects:
-                bpy.ops.object.select_all(action="DESELECT")
+                ensure_object_mode()
+                deselect_all_objects()
                 devkit_arm.select_set(True)
                 bpy.context.view_layer.objects.active = devkit_arm
 

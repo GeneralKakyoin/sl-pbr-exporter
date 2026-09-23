@@ -16,6 +16,8 @@ from ..config import (
     SUFFIX_EMISSIVE,
     SUFFIX_NORMAL,
     SUFFIX_ORM,
+    deselect_all_objects,
+    ensure_object_mode,
     get_principled_socket,
     set_material_blend_method,
 )
@@ -208,7 +210,8 @@ def export_standalone_glb(
 
     try:
         # Select exclusively
-        bpy.ops.object.select_all(action="DESELECT")
+        ensure_object_mode()
+        deselect_all_objects()
         obj.select_set(True)
         bpy.context.view_layer.objects.active = obj
 

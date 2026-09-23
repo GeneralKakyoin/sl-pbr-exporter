@@ -7,7 +7,13 @@ import bpy
 from bpy.props import BoolProperty, CollectionProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import Operator, PropertyGroup, UIList
 
-from ..config import DEFAULT_DEVKIT_DIR, DEFAULT_MESH_EXPORT_DIR, get_default_devkit_blend_path
+from ..config import (
+    DEFAULT_DEVKIT_DIR,
+    DEFAULT_MESH_EXPORT_DIR,
+    deselect_all_objects,
+    ensure_object_mode,
+    get_default_devkit_blend_path,
+)
 from ..importer.devkit_binder import (
     align_item_to_devkit,
     append_devkit_from_blend,
@@ -144,6 +150,7 @@ class SL_OT_LoadSelectedItems(Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
+        ensure_object_mode()
         props = context.scene.sl_importer
         selected = [it for it in props.items if it.selected]
 
@@ -196,7 +203,7 @@ class SL_OT_LoadSelectedItems(Operator):
                         self.report({"INFO"}, f"Applied avatar shape: {shape_path.name}")
 
         # Select all imported meshes
-        bpy.ops.object.select_all(action="DESELECT")
+        deselect_all_objects()
         for m in total_imported_meshes:
             m.select_set(True)
         if total_imported_meshes:
@@ -235,6 +242,7 @@ class SL_OT_TransferWeights(Operator):
         )
 
     def execute(self, context):
+        ensure_object_mode()
         active_mesh = context.active_object
         reborn_body = context.scene.objects.get("RebornBody")
         if not reborn_body:
@@ -294,6 +302,7 @@ class SL_OT_ExportItemDAE(Operator):
         return any(o.type == "MESH" for o in context.selected_objects)
 
     def execute(self, context):
+        ensure_object_mode()
         devkit_arm = get_devkit_armature(context.scene)
         selected_meshes = [o for o in context.selected_objects if o.type == "MESH"]
 
@@ -314,7 +323,7 @@ class SL_OT_ExportItemDAE(Operator):
             bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL")
 
         # Select meshes and rig
-        bpy.ops.object.select_all(action="DESELECT")
+        deselect_all_objects()
         if devkit_arm:
             devkit_arm.select_set(True)
         for m in selected_meshes:
