@@ -132,7 +132,7 @@ def set_material_blend_method(mat: bpy.types.Material, blend_method: str) -> Non
         pass
     if hasattr(mat, "surface_render_method"):
         try:
-            if blend_method == "CLIP":
+            if blend_method in ("CLIP", "HASHED"):
                 mat.surface_render_method = "DITHERED"
             elif blend_method == "BLEND":
                 mat.surface_render_method = "BLENDED"
@@ -143,3 +143,9 @@ def set_material_blend_method(mat: bpy.types.Material, blend_method: str) -> Non
             mat.blend_method = blend_method
         except (TypeError, ValueError):
             pass
+    if hasattr(mat, "shadow_method"):
+        try:
+            mat.shadow_method = blend_method if blend_method == "OPAQUE" else "HASHED"
+        except (TypeError, ValueError):
+            pass
+

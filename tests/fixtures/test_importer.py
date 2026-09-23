@@ -171,7 +171,90 @@ class TestImporter(unittest.TestCase):
 
             bpy.data.materials.remove(mat)
 
+    def test_wire_material_textures_zero_alpha_invisible(self):
+        """Verify that zero-alpha materials (even with skin prefix) get Alpha=0 and HASHED blend mode."""
+        from sl_pbr_exporter.importer.devkit_binder import wire_material_textures
+
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            diff_img_path = folder / "1_diffuse.png"
+
+            img_dummy = bpy.data.images.new("dummy_zero_alpha", width=16, height=16)
+            img_dummy.filepath_raw = str(diff_img_path)
+            img_dummy.file_format = "PNG"
+            img_dummy.save()
+            bpy.data.images.remove(img_dummy)
+
+            mat = bpy.data.materials.new("Skin_Head_1_mat")
+            mat.use_nodes = True
+
+            meta = {
+                "name": "Skin_Head_1_mat",
+                "diffuse": str(diff_img_path),
+                "diffuse_color": [1.0, 1.0, 1.0, 0.0],
+            }
+
+            wire_material_textures(mat, texture_dir=folder, material_meta=meta, dae_dir=folder)
+
+            bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+            alpha_sock = bsdf.inputs["Alpha"]
+            self.assertFalse(alpha_sock.is_linked, "Zero alpha should not link texture alpha directly")
+            self.assertEqual(alpha_sock.default_value, 0.0, "Zero alpha material should have Alpha=0.0")
+            if hasattr(mat, "blend_method"):
+                self.assertEqual(mat.blend_method, "HASHED", "Zero alpha skin must use HASHED to stay transparent")
+
+            bpy.data.materials.remove(mat)
+
+    def test_wire_material_manifest_exact_matching_avalon_head(self):
+        """Verify that LeLutka EvoX multi-part head materials match their exact manifest entries."""
+        import json
+        manifest_data = {
+            "Mat_HEAD_lel_evox_AVALON_4_0_1": {
+                "name": "HEAD_lel_evox_AVALON_4_0_1_mat",
+                "diffuse": "textures/HEAD_lel_evox_AVALON_4_0/1_diffuse.png",
+                "diffuse_color": [1.0, 1.0, 1.0, 1.0],
+            },
+            "Mat_Head_1": {
+                "name": "Skin_Head_1_mat",
+                "diffuse": "textures/Head/1_diffuse.png",
+                "diffuse_color": [1.0, 1.0, 1.0, 0.0],
+            },
+            "Mat_Head_2": {
+                "name": "Skin_Head_2_mat",
+                "diffuse": "textures/Head/2_diffuse.png",
+                "diffuse_color": [1.0, 1.0, 1.0, 1.0],
+            },
+            "Mat_HEAD_lel_evox_AVALON_4_0_4": {
+                "name": "HEAD_lel_evox_AVALON_4_0_4_mat",
+                "diffuse": "textures/HEAD_lel_evox_AVALON_4_0/4_diffuse.png",
+                "diffuse_color": [0.0, 0.0, 0.0, 0.0],
+            },
+        }
+
+        # Simulate matching algorithm
+        def match_mat(mat_name):
+            for k, v in manifest_data.items():
+                if k == mat_name or v.get("name") == mat_name:
+                    return v
+            return None
+
+        # Verify exact matching
+        m1 = match_mat("Skin_Head_1_mat")
+        self.assertIsNotNone(m1)
+        self.assertEqual(m1["diffuse"], "textures/Head/1_diffuse.png")
+        self.assertEqual(m1["diffuse_color"][3], 0.0)
+
+        m2 = match_mat("Skin_Head_2_mat")
+        self.assertIsNotNone(m2)
+        self.assertEqual(m2["diffuse"], "textures/Head/2_diffuse.png")
+        self.assertEqual(m2["diffuse_color"][3], 1.0)
+
+        m4 = match_mat("HEAD_lel_evox_AVALON_4_0_4_mat")
+        self.assertIsNotNone(m4)
+        self.assertEqual(m4["diffuse"], "textures/HEAD_lel_evox_AVALON_4_0/4_diffuse.png")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

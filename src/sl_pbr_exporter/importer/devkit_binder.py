@@ -145,13 +145,28 @@ def wire_material_textures(
     # 2. Resolve texture file paths
     clean_mat_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", mat.name).strip("_")
 
+    meta_folder = material_meta.get("folder") if material_meta else None
+
     def resolve_meta_path(path_val: Optional[str]) -> Optional[Path]:
         if not path_val:
             return None
         p = Path(path_val)
         if p.is_absolute() and p.exists():
             return p
-        search_roots = [r for r in (dae_dir, texture_dir, texture_dir.parent if texture_dir else None) if r]
+        search_roots = [
+            r
+            for r in (
+                dae_dir,
+                dae_dir / "textures" if dae_dir else None,
+                dae_dir / "textures" / meta_folder if (dae_dir and meta_folder) else None,
+                texture_dir,
+                texture_dir / meta_folder if (texture_dir and meta_folder) else None,
+                texture_dir.parent if texture_dir else None,
+                texture_dir.parent / meta_folder if (texture_dir and meta_folder) else None,
+                texture_dir.parent / "textures" / meta_folder if (texture_dir and meta_folder) else None,
+            )
+            if r
+        ]
         for root in search_roots:
             cand = root / path_val
             if cand.exists():
@@ -170,29 +185,41 @@ def wire_material_textures(
 
     # Fallback texture discovery if not specified in manifest
     def find_texture(role: str) -> Optional[Path]:
-        if not texture_dir or not texture_dir.exists():
+        search_dirs = []
+        if meta_folder and dae_dir:
+            search_dirs.append(dae_dir / "textures" / meta_folder)
+        if meta_folder and texture_dir:
+            search_dirs.append(texture_dir / meta_folder)
+            search_dirs.append(texture_dir.parent / meta_folder)
+            search_dirs.append(texture_dir.parent / "textures" / meta_folder)
+        if texture_dir:
+            search_dirs.append(texture_dir)
+        search_dirs = [d for d in search_dirs if d and d.exists() and d.is_dir()]
+        if not search_dirs:
             return None
+
         m_idx = re.search(r"_(\d+)_mat$", clean_mat_name)
         mat_prefix = f"{m_idx.group(1)}_" if m_idx else ""
 
-        # Priority 1: prefix + role (e.g. 1_diffuse.png)
-        if mat_prefix:
-            c1 = texture_dir / f"{mat_prefix}{role}.png"
-            if c1.exists():
-                return c1
-            for f in texture_dir.glob(f"{mat_prefix}*{role}*.png"):
+        for s_dir in search_dirs:
+            # Priority 1: prefix + role (e.g. 1_diffuse.png)
+            if mat_prefix:
+                c1 = s_dir / f"{mat_prefix}{role}.png"
+                if c1.exists():
+                    return c1
+                for f in s_dir.glob(f"{mat_prefix}*{role}*.png"):
+                    return f
+
+            # Priority 2: clean_name + role
+            for f in s_dir.glob(f"*{clean_mat_name}*{role}*.png"):
                 return f
 
-        # Priority 2: clean_name + role
-        for f in texture_dir.glob(f"*{clean_mat_name}*{role}*.png"):
-            return f
-
-        # Priority 3: role.png
-        c2 = texture_dir / f"{role}.png"
-        if c2.exists():
-            return c2
-        for f in texture_dir.glob(f"*{role}*.png"):
-            return f
+            # Priority 3: role.png
+            c2 = s_dir / f"{role}.png"
+            if c2.exists():
+                return c2
+            for f in s_dir.glob(f"*{role}*.png"):
+                return f
         return None
 
     diff_file = m_diff or find_texture("diffuse") or find_texture("basecolor")
@@ -245,7 +272,14 @@ def wire_material_textures(
                 links.new(t_node.outputs["Color"], bc_sock)
 
         # Alpha wiring
-        if is_skin:
+        is_dummy = hasattr(img, "size") and img.size[0] <= 32 and img.size[1] <= 32
+        if diff_color[3] == 0.0 or is_dummy:
+            if "Alpha" in principled.inputs:
+                principled.inputs["Alpha"].default_value = 0.0
+            set_material_blend_method(mat, "HASHED")
+        elif is_skin and diff_color[3] > 0.0:
+            if "Alpha" in principled.inputs:
+                principled.inputs["Alpha"].default_value = 1.0
             set_material_blend_method(mat, "OPAQUE")
         else:
             if "Alpha" in t_node.outputs and "Alpha" in principled.inputs:
@@ -258,7 +292,7 @@ def wire_material_textures(
                     links.new(math_node.outputs["Value"], principled.inputs["Alpha"])
                 else:
                     links.new(t_node.outputs["Alpha"], principled.inputs["Alpha"])
-                set_material_blend_method(mat, "HASHED")
+            set_material_blend_method(mat, "HASHED")
         row_y -= 280
     else:
         # Solid diffuse color
@@ -267,7 +301,9 @@ def wire_material_textures(
             bc_sock.default_value = (diff_color[0], diff_color[1], diff_color[2], 1.0)
         if diff_color[3] == 0.0 and "Alpha" in principled.inputs:
             principled.inputs["Alpha"].default_value = 0.0
-        set_material_blend_method(mat, "OPAQUE" if is_skin else "HASHED")
+            set_material_blend_method(mat, "HASHED")
+        else:
+            set_material_blend_method(mat, "OPAQUE" if (is_skin and diff_color[3] > 0.0) else "HASHED")
 
     # 4. Wire Normal Map
     if norm_file and norm_file.exists():
@@ -376,7 +412,7 @@ def wire_material_textures(
 
 def import_and_bind_item(
     dae_path: Path,
-    devkit_arm: bpy.types.Object,
+    devkit_arm: Optional[bpy.types.Object] = None,
     textures_dir: Optional[Path] = None,
 ) -> List[bpy.types.Object]:
     """Import a Collada DAE item, align -90° Z, parent to DevKit armature, and wire materials."""
@@ -416,16 +452,18 @@ def import_and_bind_item(
             c.objects.unlink(mesh_obj)
         target_coll.objects.link(mesh_obj)
 
-        # Add or update Armature modifier
-        arm_mod = next((m for m in mesh_obj.modifiers if m.type == "ARMATURE"), None)
-        if not arm_mod:
-            arm_mod = mesh_obj.modifiers.new(name="Armature", type="ARMATURE")
-        arm_mod.object = devkit_arm
-        mesh_obj.parent = devkit_arm
+        # Add or update Armature modifier if devkit_arm provided
+        if devkit_arm:
+            arm_mod = next((m for m in mesh_obj.modifiers if m.type == "ARMATURE"), None)
+            if not arm_mod:
+                arm_mod = mesh_obj.modifiers.new(name="Armature", type="ARMATURE")
+            arm_mod.object = devkit_arm
+            mesh_obj.parent = devkit_arm
 
-    # Remove stray Collada armature from DAE import
-    for arm in stray_armatures:
-        bpy.data.objects.remove(arm, do_unlink=True)
+    # Remove stray Collada armature from DAE import if devkit_arm is active
+    if devkit_arm:
+        for arm in stray_armatures:
+            bpy.data.objects.remove(arm, do_unlink=True)
 
     # -----------------------------------------------------------------------
     # Wire materials with manifest and texture folder detection
@@ -486,18 +524,44 @@ def import_and_bind_item(
                 continue
             processed_materials.add(mat.name)
 
-            # Match metadata from manifest
+            # Match metadata from manifest with strict priority order
             meta = None
             if materials_manifest:
+                # 1. Exact match on manifest key or v["name"]
                 for k, v in materials_manifest.items():
-                    v_name = v.get("name", "")
-                    if k == mat.name or v_name == mat.name or mat.name.startswith(k) or k.startswith(mat.name):
+                    if k == mat.name or v.get("name") == mat.name:
                         meta = v
                         break
+                # 2. Case-insensitive exact match
+                if not meta:
+                    for k, v in materials_manifest.items():
+                        if k.lower() == mat.name.lower() or v.get("name", "").lower() == mat.name.lower():
+                            meta = v
+                            break
+                # 3. Normalized match (stripping leading mat_ / Mat_ and trailing _mat)
+                if not meta:
+                    norm_mat = re.sub(r"^mat_", "", mat.name.lower())
+                    norm_mat = re.sub(r"_mat$", "", norm_mat)
+                    for k, v in materials_manifest.items():
+                        norm_k = re.sub(r"^mat_", "", re.sub(r"_mat$", "", k.lower()))
+                        norm_v = re.sub(r"^mat_", "", re.sub(r"_mat$", "", v.get("name", "").lower()))
+                        if norm_mat in (norm_k, norm_v):
+                            meta = v
+                            break
+                # 4. Fallback: match on exact material slot number suffix (e.g. _1_mat -> ends with _1)
+                if not meta:
                     m_idx = re.search(r"_(\d+)_mat$", mat.name)
-                    if m_idx and (f"_{m_idx.group(1)}" in k or f"_{m_idx.group(1)}_mat" in v_name):
-                        meta = v
-                        break
+                    if m_idx:
+                        slot_str = m_idx.group(1)
+                        for k, v in materials_manifest.items():
+                            v_name = v.get("name", "")
+                            if (
+                                k.endswith(f"_{slot_str}")
+                                or k.endswith(f"_{slot_str}_mat")
+                                or v_name.endswith(f"_{slot_str}_mat")
+                            ):
+                                meta = v
+                                break
 
             wire_material_textures(
                 mat,
@@ -506,8 +570,35 @@ def import_and_bind_item(
                 dae_dir=dae_path.parent,
             )
 
-        # Hide zero-alpha helper shells
+    # Hide zero-alpha helper shells & cutouts
+    for mesh_obj in imported_meshes:
+        all_zero = False
         if len(mesh_obj.data.vertices) <= 4:
+            all_zero = True
+        else:
+            valid_slots = [s for s in mesh_obj.material_slots if s.material]
+            if valid_slots:
+                zero_count = 0
+                for s in valid_slots:
+                    m = s.material
+                    bsdf = (
+                        next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+                        if m.use_nodes and m.node_tree
+                        else None
+                    )
+                    if hasattr(m, "diffuse_color") and m.diffuse_color[3] == 0.0:
+                        zero_count += 1
+                    elif (
+                        bsdf
+                        and "Alpha" in bsdf.inputs
+                        and not bsdf.inputs["Alpha"].is_linked
+                        and bsdf.inputs["Alpha"].default_value == 0.0
+                    ):
+                        zero_count += 1
+                if zero_count == len(valid_slots):
+                    all_zero = True
+
+        if all_zero:
             mesh_obj.hide_viewport = True
             mesh_obj.hide_render = True
 
