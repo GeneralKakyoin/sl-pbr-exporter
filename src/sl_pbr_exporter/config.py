@@ -1,7 +1,42 @@
-"""Configuration constants, socket mapping definitions, and version-compatibility helpers."""
-
+import os
+from pathlib import Path
 from typing import Optional
 import bpy
+
+# Dynamic User Paths (decoupled from any hardcoded username)
+DOCUMENTS_DIR = Path.home() / "Documents"
+DEFAULT_SL_DOCS_DIR = DOCUMENTS_DIR / "SecondLife"
+DEFAULT_DEVKIT_DIR = DEFAULT_SL_DOCS_DIR / "Kits"
+DEFAULT_MESH_EXPORT_DIR = DEFAULT_SL_DOCS_DIR / "Exports" / "Mesh"
+DEFAULT_PBR_EXPORT_DIR = DEFAULT_SL_DOCS_DIR / "Exports" / "PBR"
+
+_local_appdata = os.environ.get("LOCALAPPDATA", "")
+DEFAULT_FIRESTORM_CACHE = Path(_local_appdata) / "FirestormOS_x64" if _local_appdata else Path.home() / "AppData" / "Local" / "FirestormOS_x64"
+DEFAULT_FIRESTORM_XML_DIR = Path(_local_appdata) / "Temp" / "Firestorm_MeshExport" if _local_appdata else Path.home() / "AppData" / "Local" / "Temp" / "Firestorm_MeshExport"
+
+
+def get_default_devkit_blend_path() -> Optional[Path]:
+    """Find the best matching Avastar DevKit .blend in the SecondLife/Kits directory."""
+    if not DEFAULT_DEVKIT_DIR.exists():
+        return None
+
+    blend_files = list(DEFAULT_DEVKIT_DIR.glob("*.blend"))
+    if not blend_files:
+        return None
+
+    # Version-specific preference
+    b_version = bpy.app.version
+    if b_version[0] == 3 and b_version[1] == 6:
+        for f in blend_files:
+            if "3.6" in f.name:
+                return f
+    elif b_version[0] >= 4:
+        for f in blend_files:
+            if "5." in f.name or "4." in f.name:
+                return f
+
+    # Fallback to the first available kit
+    return blend_files[0]
 
 # Second Life Hard Limits and Defaults
 MAX_TEXTURE_RES = 2048
