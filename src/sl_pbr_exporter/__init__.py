@@ -80,18 +80,30 @@ classes = (
 
 def register():
     for cls in classes:
-        bpy.utils.register_class(cls)
+        try:
+            bpy.utils.register_class(cls)
+        except ValueError:
+            pass
     bpy.types.Scene.sl_pbr = PointerProperty(type=SLPBR_SceneProperties)
     bpy.types.Scene.sl_importer = PointerProperty(type=SL_ImporterProperties)
 
 
 def unregister():
     if hasattr(bpy.types.Scene, "sl_importer"):
-        del bpy.types.Scene.sl_importer
+        try:
+            del bpy.types.Scene.sl_importer
+        except Exception:
+            pass
     if hasattr(bpy.types.Scene, "sl_pbr"):
-        del bpy.types.Scene.sl_pbr
+        try:
+            del bpy.types.Scene.sl_pbr
+        except Exception:
+            pass
     for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+        try:
+            bpy.utils.unregister_class(cls)
+        except (RuntimeError, ValueError):
+            pass
 
 
 if __name__ == "__main__":

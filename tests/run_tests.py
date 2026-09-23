@@ -27,7 +27,11 @@ def run_test_suite():
     print(f"  Python Version : {sys.version.split()[0]}")
     print("=" * 70 + "\n")
 
-    # Register add-on
+    # Register add-on safely (unregister first if already loaded from user preferences)
+    try:
+        sl_pbr_exporter.unregister()
+    except Exception:
+        pass
     sl_pbr_exporter.register()
 
     # Load all fixture tests
@@ -41,7 +45,10 @@ def run_test_suite():
     result = runner.run(suite)
 
     # Unregister add-on
-    sl_pbr_exporter.unregister()
+    try:
+        sl_pbr_exporter.unregister()
+    except Exception:
+        pass
 
     print("\n" + "=" * 70)
     if result.wasSuccessful():

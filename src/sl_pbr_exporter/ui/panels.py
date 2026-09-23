@@ -191,7 +191,7 @@ class SLSUITE_PT_MainPanel(Panel):
 
             # 3. Fitting & Weight Tools
             box_fit = layout.box()
-            box_fit.label(text="Fitting & Weight Tools", icon="WHEEL")
+            box_fit.label(text="Fitting & Weight Tools", icon="TOOL_SETTINGS")
             box_fit.operator("sl_suite.align_to_devkit", text="Rotate -90° (Align with Body)", icon="DRIVER_ROTATIONAL_DIFFERENCE")
             box_fit.operator("sl_suite.transfer_weights", text="Transfer Weights from Body", icon="MOD_VERTEX_WEIGHT")
 
