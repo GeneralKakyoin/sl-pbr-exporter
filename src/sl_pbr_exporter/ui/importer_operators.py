@@ -13,6 +13,7 @@ from ..importer.devkit_binder import (
     append_devkit_from_blend,
     get_devkit_armature,
     import_and_bind_item,
+    setup_devkit_visibility,
 )
 from ..importer.mesh_resolver import scan_directory_items
 from ..importer.shape_loader import apply_shape_xml, find_shape_xml
@@ -166,6 +167,9 @@ class SL_OT_LoadSelectedItems(Operator):
             self.report({"ERROR"}, "No DevKit armature found in scene, and could not append one. Please check DevKit path.")
             return {"CANCELLED"}
 
+        # Clean devkit visibility (keep RebornBody visible, hide alternate meshes)
+        setup_devkit_visibility()
+
         # 2. Import and bind checked items
         total_imported_meshes = []
         for item in selected:
@@ -198,7 +202,20 @@ class SL_OT_LoadSelectedItems(Operator):
         if total_imported_meshes:
             context.view_layer.objects.active = total_imported_meshes[0]
 
-        self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto '{devkit_arm.name}' rig!")
+        # Switch 3D Viewport shading to Material Preview so materials and textures are visible
+        try:
+            wm = getattr(context, "window_manager", None)
+            if wm:
+                for window in wm.windows:
+                    for area in window.screen.areas:
+                        if area.type == "VIEW_3D":
+                            for space in area.spaces:
+                                if space.type == "VIEW_3D":
+                                    space.shading.type = "MATERIAL"
+        except Exception:
+            pass
+
+        self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto '{devkit_arm.name}' rig with textures!")
         return {"FINISHED"}
 
 

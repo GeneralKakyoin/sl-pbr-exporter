@@ -96,6 +96,82 @@ class TestImporter(unittest.TestCase):
             self.assertNotIn("Test_combined", names)
             self.assertNotIn("Avatar_shape", names)
 
+    def test_wire_material_textures_with_manifest(self):
+        """Verify that wire_material_textures correctly uses metadata from *_materials.json."""
+        from sl_pbr_exporter.importer.devkit_binder import wire_material_textures
+
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            diff_img_path = folder / "1_diffuse.png"
+            norm_img_path = folder / "1_normal.png"
+            orm_img_path = folder / "1_orm.png"
+
+            # Create dummy image files
+            img_dummy = bpy.data.images.new("dummy", width=16, height=16)
+            img_dummy.filepath_raw = str(diff_img_path)
+            img_dummy.file_format = "PNG"
+            img_dummy.save()
+            img_dummy.filepath_raw = str(norm_img_path)
+            img_dummy.save()
+            img_dummy.filepath_raw = str(orm_img_path)
+            img_dummy.save()
+            bpy.data.images.remove(img_dummy)
+
+            mat = bpy.data.materials.new("TestDress_1_mat")
+            mat.use_nodes = True
+
+            meta = {
+                "name": "TestDress_1_mat",
+                "diffuse": str(diff_img_path),
+                "normal": str(norm_img_path),
+                "orm": str(orm_img_path),
+                "diffuse_color": [1.0, 0.8, 0.9, 1.0],
+            }
+
+            wire_material_textures(mat, texture_dir=folder, material_meta=meta, dae_dir=folder)
+
+            # Assert node tree links
+            bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+            base_col_sock = bsdf.inputs["Base Color"]
+            self.assertTrue(base_col_sock.is_linked, "Base Color should be linked")
+
+            norm_sock = bsdf.inputs["Normal"]
+            self.assertTrue(norm_sock.is_linked, "Normal should be linked via Normal Map")
+
+            rough_sock = bsdf.inputs["Roughness"]
+            self.assertTrue(rough_sock.is_linked, "Roughness should be linked from ORM")
+
+            metal_sock = bsdf.inputs["Metallic"]
+            self.assertTrue(metal_sock.is_linked, "Metallic should be linked from ORM")
+
+            bpy.data.materials.remove(mat)
+
+    def test_wire_material_textures_with_fallback_prefix(self):
+        """Verify that wire_material_textures falls back to regex matching (e.g. 2_diffuse.png) without manifest."""
+        from sl_pbr_exporter.importer.devkit_binder import wire_material_textures
+
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            diff_img_path = folder / "2_diffuse.png"
+
+            img_dummy = bpy.data.images.new("dummy2", width=16, height=16)
+            img_dummy.filepath_raw = str(diff_img_path)
+            img_dummy.file_format = "PNG"
+            img_dummy.save()
+            bpy.data.images.remove(img_dummy)
+
+            mat = bpy.data.materials.new("Boots_2_mat")
+            mat.use_nodes = True
+
+            wire_material_textures(mat, texture_dir=folder, material_meta=None, dae_dir=folder)
+
+            bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+            base_col_sock = bsdf.inputs["Base Color"]
+            self.assertTrue(base_col_sock.is_linked, "Base Color should be linked from 2_diffuse.png")
+
+            bpy.data.materials.remove(mat)
+
 
 if __name__ == "__main__":
     unittest.main()
+

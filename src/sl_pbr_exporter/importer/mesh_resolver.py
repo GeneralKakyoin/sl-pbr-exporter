@@ -2,7 +2,24 @@
 
 import json
 from pathlib import Path
+import re
 from typing import Any, Dict, List
+
+
+def resolve_item_texture_dir(base_folder: Path, item_stem: str) -> str:
+    """Find the most specific texture directory for an item (e.g. textures/<ItemName>/)."""
+    clean_stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", item_stem)
+    candidates = [
+        base_folder / "textures" / clean_stem,
+        base_folder / "textures" / item_stem,
+        base_folder / clean_stem,
+        base_folder / "textures",
+        base_folder,
+    ]
+    for c in candidates:
+        if c.exists() and c.is_dir() and any(c.glob("*.png")):
+            return str(c)
+    return str(base_folder / "textures")
 
 
 def scan_directory_items(folder_path: Path) -> List[Dict[str, Any]]:
@@ -29,7 +46,7 @@ def scan_directory_items(folder_path: Path) -> List[Dict[str, Any]]:
                             "name": name,
                             "type": "DAE",
                             "path": str(dae_path),
-                            "textures_dir": str(folder_path / "textures"),
+                            "textures_dir": resolve_item_texture_dir(folder_path, dae_path.stem),
                         })
         except Exception:
             pass
@@ -44,7 +61,7 @@ def scan_directory_items(folder_path: Path) -> List[Dict[str, Any]]:
                 "name": dae.stem,
                 "type": "DAE",
                 "path": str(dae),
-                "textures_dir": str(folder_path / "textures"),
+                "textures_dir": resolve_item_texture_dir(folder_path, dae.stem),
             })
 
     # 3. Check for .dae files in immediate subdirectories (single-item mode folders)
@@ -57,7 +74,7 @@ def scan_directory_items(folder_path: Path) -> List[Dict[str, Any]]:
                         "name": dae.stem,
                         "type": "DAE",
                         "path": str(dae),
-                        "textures_dir": str(sub / "textures"),
+                        "textures_dir": resolve_item_texture_dir(sub, dae.stem),
                     })
 
     # 4. Check for Second Life object XML files
