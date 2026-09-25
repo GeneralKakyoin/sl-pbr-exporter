@@ -226,44 +226,6 @@ class SL_OT_LoadSelectedItems(Operator):
         return {"FINISHED"}
 
 
-class SL_OT_ImportAvatar(Operator):
-    """Import a complete Second Life avatar with native Bento skeleton, PBR materials, and 1:1 shape keys."""
-    bl_idname = "sl_suite.import_avatar"
-    bl_label = "Import Full Avatar"
-    bl_description = "Import complete Second Life avatar with native Bento skeleton, materials, lighting, and 1:1 shape"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        ensure_object_mode()
-        props = context.scene.sl_importer
-        folder = Path(bpy.path.abspath(props.folder_path.strip())) if props.folder_path else None
-
-        if not folder or not folder.exists() or not folder.is_dir():
-            self.report({"ERROR"}, "Please select a valid avatar folder.")
-            return {"CANCELLED"}
-
-        script_path = folder / "import_avatar.py"
-        if script_path.exists():
-            try:
-                import runpy
-                runpy.run_path(str(script_path), run_name="__main__")
-                self.report({"INFO"}, f"Successfully imported avatar: {folder.name} with 1:1 SL shape!")
-                return {"FINISHED"}
-            except Exception as e:
-                self.report({"ERROR"}, f"Failed importing avatar: {e}")
-                return {"CANCELLED"}
-
-        # Fallback: check for pre-built .blend file
-        blend_cands = list(folder.glob("*.blend"))
-        if blend_cands:
-            bpy.ops.wm.open_mainfile(filepath=str(blend_cands[0]))
-            self.report({"INFO"}, f"Opened {blend_cands[0].name}")
-            return {"FINISHED"}
-
-        self.report({"ERROR"}, f"No import_avatar.py or .blend found in '{folder.name}'.")
-        return {"CANCELLED"}
-
-
 class SL_OT_TransferWeights(Operator):
     """Transfer / Refit vertex weights from the Reborn body mesh onto the active item."""
     bl_idname = "sl_suite.transfer_weights"

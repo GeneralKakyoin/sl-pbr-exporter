@@ -185,14 +185,9 @@ class SLSUITE_PT_MainPanel(Panel):
                 row_shape.label(text=f"Shape: {importer_props.detected_shape_name}", icon="USER")
                 row_shape.prop(importer_props, "apply_shape", text="Apply")
 
-            row_avatar = box_items.row()
-            row_avatar.scale_y = 1.4
-            row_avatar.operator("sl_suite.import_avatar", text="Import Full Avatar (1:1 Shape)", icon="OUTLINER_OB_ARMATURE")
-
-            box_items.separator()
             row_load = box_items.row()
-            row_load.scale_y = 1.1
-            row_load.operator("sl_suite.load_selected_items", text="Fit Items onto DevKit Rig", icon="MOD_CLOTH")
+            row_load.scale_y = 1.4
+            row_load.operator("sl_suite.load_selected_items", text="Load Selected onto DevKit", icon="IMPORT")
 
             # 3. Fitting & Weight Tools
             box_fit = layout.box()
