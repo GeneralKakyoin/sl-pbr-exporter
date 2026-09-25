@@ -52,36 +52,36 @@ SL_SKELETON_HIERARCHY: Dict[str, Tuple[Optional[str], Tuple[float, float, float]
     'mFaceEyeLidLowerLeft': ('mFaceRoot', (0.07, 0.031, 0.033)),
     'mFaceEyeLidUpperRight': ('mFaceRoot', (0.07, -0.031, 0.028)),
     'mFaceEyeLidLowerRight': ('mFaceRoot', (0.07, -0.031, 0.033)),
-    'mFaceEar1Left': ('mFaceRoot', (-0.007, 0.065, 0.002)),
-    'mFaceEar2Left': ('mFaceRoot', (-0.033, 0.083, 0.034)),
-    'mFaceEar1Right': ('mFaceRoot', (-0.007, -0.065, 0.002)),
-    'mFaceEar2Right': ('mFaceRoot', (-0.033, -0.083, 0.034)),
+    'mFaceEar1Left': ('mFaceRoot', (0.0, 0.08, 0.002)),
+    'mFaceEar2Left': ('mFaceEar1Left', (-0.019, 0.018, 0.025)),
+    'mFaceEar1Right': ('mFaceRoot', (0.0, -0.08, 0.002)),
+    'mFaceEar2Right': ('mFaceEar1Right', (-0.019, -0.018, 0.025)),
     'mFaceNoseLeft': ('mFaceRoot', (0.086, 0.015, -0.004)),
     'mFaceNoseCenter': ('mFaceRoot', (0.102, 0.0, 0.0)),
     'mFaceNoseRight': ('mFaceRoot', (0.086, -0.015, -0.004)),
-    'mFaceCheekLowerLeft': ('mFaceRoot', (0.049, 0.036, -0.029)),
-    'mFaceCheekUpperLeft': ('mFaceRoot', (0.071, 0.034, -0.006)),
-    'mFaceCheekLowerRight': ('mFaceRoot', (0.049, -0.036, -0.029)),
-    'mFaceCheekUpperRight': ('mFaceRoot', (0.071, -0.034, -0.006)),
+    'mFaceCheekLowerLeft': ('mFaceRoot', (0.05, 0.034, -0.031)),
+    'mFaceCheekUpperLeft': ('mFaceRoot', (0.07, 0.034, -0.005)),
+    'mFaceCheekLowerRight': ('mFaceRoot', (0.05, -0.034, -0.031)),
+    'mFaceCheekUpperRight': ('mFaceRoot', (0.07, -0.034, -0.005)),
     'mFaceJaw': ('mFaceRoot', (-0.001, 0.0, -0.015)),
-    'mFaceChin': ('mFaceJaw', (0.066, 0.0, -0.042)),
-    'mFaceTeethLower': ('mFaceJaw', (0.023, 0.0, -0.026)),
-    'mFaceLipLowerLeft': ('mFaceJaw', (0.052, 0.014, -0.021)),
-    'mFaceLipLowerRight': ('mFaceJaw', (0.052, -0.014, -0.021)),
-    'mFaceLipLowerCenter': ('mFaceJaw', (0.057, 0.0, -0.021)),
-    'mFaceTongueBase': ('mFaceJaw', (0.039, 0.0, 0.005)),
-    'mFaceTongueTip': ('mFaceTongueBase', (-0.017, 0.0, 0.002)),
-    'mFaceJawShaper': ('mFaceRoot', (0.05, 0.0, -0.024)),
-    'mFaceForeheadCenter': ('mFaceRoot', (0.07, 0.0, 0.061)),
+    'mFaceChin': ('mFaceJaw', (0.074, 0.0, -0.054)),
+    'mFaceTeethLower': ('mFaceJaw', (0.021, 0.0, -0.039)),
+    'mFaceLipLowerLeft': ('mFaceTeethLower', (0.045, 0.0, 0.0)),
+    'mFaceLipLowerRight': ('mFaceTeethLower', (0.045, 0.0, 0.0)),
+    'mFaceLipLowerCenter': ('mFaceTeethLower', (0.045, 0.0, 0.0)),
+    'mFaceTongueBase': ('mFaceTeethLower', (0.039, 0.0, 0.005)),
+    'mFaceTongueTip': ('mFaceTongueBase', (0.022, 0.0, 0.007)),
+    'mFaceJawShaper': ('mFaceRoot', (0.0, 0.0, 0.0)),
+    'mFaceForeheadCenter': ('mFaceRoot', (0.069, 0.0, 0.065)),
     'mFaceNoseBase': ('mFaceRoot', (0.094, 0.0, -0.016)),
-    'mFaceTeethUpper': ('mFaceRoot', (0.022, 0.0, -0.019)),
-    'mFaceLipUpperLeft': ('mFaceRoot', (0.057, 0.014, -0.013)),
-    'mFaceLipUpperRight': ('mFaceRoot', (0.057, -0.014, -0.013)),
-    'mFaceLipCornerLeft': ('mFaceRoot', (0.043, 0.029, -0.017)),
-    'mFaceLipCornerRight': ('mFaceRoot', (0.043, -0.029, -0.017)),
-    'mFaceLipUpperCenter': ('mFaceRoot', (0.06, 0.0, -0.013)),
-    'mFaceEyecornerInnerLeft': ('mFaceRoot', (0.074, 0.012, 0.024)),
-    'mFaceEyecornerInnerRight': ('mFaceRoot', (0.074, -0.012, 0.024)),
+    'mFaceTeethUpper': ('mFaceRoot', (0.02, 0.0, -0.03)),
+    'mFaceLipUpperLeft': ('mFaceTeethUpper', (0.045, 0.0, -0.003)),
+    'mFaceLipUpperRight': ('mFaceTeethUpper', (0.045, 0.0, -0.003)),
+    'mFaceLipCornerLeft': ('mFaceTeethUpper', (0.028, -0.019, -0.01)),
+    'mFaceLipCornerRight': ('mFaceTeethUpper', (0.028, 0.019, -0.01)),
+    'mFaceLipUpperCenter': ('mFaceTeethUpper', (0.045, 0.0, -0.003)),
+    'mFaceEyecornerInnerLeft': ('mFaceRoot', (0.075, 0.017, 0.032)),
+    'mFaceEyecornerInnerRight': ('mFaceRoot', (0.075, -0.017, 0.032)),
     'mFaceNoseBridge': ('mFaceRoot', (0.091, 0.0, 0.02)),
     'mCollarLeft': ('mChest', (0.008, 0.033, 0.207)),
     'L_CLAVICLE': ('mCollarLeft', (0.0, 0.06, 0.0)),
@@ -296,18 +296,40 @@ def apply_exact_sl_shape_to_meshes(
         shape_bones, dae_skin_info, anchor_bone=anchor_bone
     )
 
+    facial_bone_names = {
+        k for k in SL_SKELETON_HIERARCHY
+        if k.startswith('mFace') or k in ('mHead', 'mSkull', 'mEyeLeft', 'mEyeRight')
+    }
+
     deformed_count = 0
     for obj in meshes:
         if obj.type != 'MESH' or not obj.data or not obj.vertex_groups:
             continue
 
         vgroups = {g.index: g.name for g in obj.vertex_groups}
-        # Check if mesh has any bone weights matching the shape bones
-        matching_bones = set(vgroups.values()).intersection(eff_scales.keys())
-        if not matching_bones:
+        mesh = obj.data
+
+        # Ensure this is a Bento head / facial attachment mesh, NOT a body or clothing piece.
+        # Bodies (Maitreya, eBODY Reborn) and clothes are rigged to the body skeleton and must
+        # not be collapsed towards the mNeck anchor.
+        has_facial_weight = False
+        for v in mesh.vertices:
+            for g in v.groups:
+                if g.weight > 0.01:
+                    bname = vgroups.get(g.group)
+                    if bname in facial_bone_names:
+                        has_facial_weight = True
+                        break
+            if has_facial_weight:
+                break
+
+        if not has_facial_weight:
+            if mesh.shape_keys:
+                sk = mesh.shape_keys.key_blocks.get(shape_key_name)
+                if sk:
+                    sk.value = 0.0
             continue
 
-        mesh = obj.data
         BSM = np.array(obj.matrix_world, dtype=np.float32)
         try:
             inv_BSM = np.linalg.inv(BSM)
