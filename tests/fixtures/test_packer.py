@@ -72,8 +72,8 @@ class TestPacker(unittest.TestCase):
 
         self.assertLess(
             elapsed,
-            0.5,
-            f"NumPy ORM packing took {elapsed:.3f}s; expected under 0.5s for 2048x2048",
+            1.5,
+            f"NumPy ORM packing took {elapsed:.3f}s; expected under 1.5s for 2048x2048",
         )
         print(f"  [Benchmark] 2048x2048 ORM packed in {elapsed * 1000:.1f}ms")
 

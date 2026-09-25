@@ -1,7 +1,7 @@
 """Second Life shape XML parser and Avastar shape loader integration."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import xml.etree.ElementTree as ET
 import bpy
 
@@ -66,30 +66,45 @@ def parse_shape_xml(shape_xml_path: Path) -> Dict[str, Any]:
     }
 
 
+from .sl_shape_engine import apply_exact_sl_shape_to_meshes
+
+
 def apply_shape_xml(
     shape_xml_path: Path,
     devkit_arm: Optional[bpy.types.Object] = None,
+    objects: Optional[List[bpy.types.Object]] = None,
 ) -> bool:
-    """Apply a Second Life shape XML to the scene using Avastar or slider parameters."""
+    """Apply a Second Life shape XML to the scene using the exact SL vertex shader engine and Avastar/sliders."""
     if not shape_xml_path.exists():
         return False
 
-    # 1. Use Avastar native import_shape operator if available
-    if hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
+    success = False
+
+    # 1. Apply exact 1:1 Second Life GPU skinning and bone-scale inversion to mesh objects
+    target_meshes = objects if objects is not None else [o for o in bpy.context.scene.objects if o.type == 'MESH']
+    deformed_count = apply_exact_sl_shape_to_meshes(
+        meshes=target_meshes,
+        folder_path=shape_xml_path.parent,
+        shape_xml_path=shape_xml_path,
+    )
+    if deformed_count > 0:
+        success = True
+
+    # 2. Also support Avastar rig driver import if available and an armature was provided
+    if devkit_arm and hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
         try:
-            # If armature given, select it
-            if devkit_arm and devkit_arm.name in bpy.context.scene.objects:
+            if devkit_arm.name in bpy.context.scene.objects:
                 ensure_object_mode()
                 deselect_all_objects()
                 devkit_arm.select_set(True)
                 bpy.context.view_layer.objects.active = devkit_arm
 
             bpy.ops.avastar.import_shape(filepath=str(shape_xml_path))
-            return True
+            success = True
         except Exception as e:
             print(f"[ShapeLoader] Avastar import_shape warning: {e}")
 
-    # 2. Fallback: Parse and store parameters as custom scene properties
+    # 3. Store slider parameters as custom scene properties
     data = parse_shape_xml(shape_xml_path)
     if data and "params" in data:
         scene = bpy.context.scene
@@ -97,6 +112,7 @@ def apply_shape_xml(
         for k, v in data["params"].items():
             prop_key = f"sl_shape_{k.replace(' ', '_')}"
             scene[prop_key] = v
-        return True
+        success = True
 
-    return False
+    return success
+

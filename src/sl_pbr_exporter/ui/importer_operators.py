@@ -198,7 +198,7 @@ class SL_OT_LoadSelectedItems(Operator):
             if folder:
                 shape_path = find_shape_xml(folder)
                 if shape_path:
-                    applied = apply_shape_xml(shape_path, devkit_arm=devkit_arm)
+                    applied = apply_shape_xml(shape_path, devkit_arm=devkit_arm, objects=total_imported_meshes)
                     if applied:
                         self.report({"INFO"}, f"Applied avatar shape: {shape_path.name}")
 
