@@ -104,6 +104,12 @@ def apply_shape_xml(
                         body_mesh = o
                         break
 
+            unshaped_neck_z = None
+            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
+                neck_candidates_before = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                if neck_candidates_before:
+                    unshaped_neck_z = max(neck_candidates_before)
+
             # Protect attached meshes from Avastar's slider vertex mutation and parenting displacement
             protected_modifiers = []
             protected_parents = []
@@ -141,9 +147,13 @@ def apply_shape_xml(
                 obj.parent = devkit_arm
                 obj.matrix_world = mw
 
-            # Measure neck vertical offset deterministically from mNeck bone head
-            # 1.607073 is Second Life reference Bento height for mNeck
-            if devkit_arm.data and "mNeck" in devkit_arm.data.bones:
+            # Measure neck vertical offset directly from body mesh vertex seam (step 423 reference),
+            # with deterministic fallback to mNeck bone head
+            if body_mesh and unshaped_neck_z is not None:
+                neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                if neck_candidates_after:
+                    delta_neck_z = max(neck_candidates_after) - unshaped_neck_z
+            elif devkit_arm.data and "mNeck" in devkit_arm.data.bones:
                 delta_neck_z = devkit_arm.data.bones["mNeck"].head_local.z - 1.607073
             elif "mNeck" in devkit_arm.pose.bones:
                 delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.607073

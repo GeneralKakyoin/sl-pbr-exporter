@@ -305,6 +305,7 @@ def apply_exact_sl_shape_to_meshes(
     shape_key_name: str = "SL_Avatar_Shape",
     anchor_bone: str = "mNeck",
     delta_neck: Optional[Any] = None,
+    dae_files: Optional[List[Path]] = None,
 ) -> int:
     """
     Applies Second Life GPU vertex shader transformation to the specified mesh objects.
@@ -346,9 +347,17 @@ def apply_exact_sl_shape_to_meshes(
                 n = min(3, len(arr))
                 delta_sl[:n] = arr[:n]
 
-    # Find and parse DAE files for skinning data
-    dae_files = list(folder_path.glob("*.dae"))
-    dae_skin_info = parse_dae_skin_info(dae_files)
+    # Find and parse DAE files for skinning data.
+    # Exclude combined avatar exports and prioritize head DAE to preserve authentic Bento bind matrices.
+    if not dae_files:
+        raw_daes = list(folder_path.glob("*.dae"))
+    else:
+        raw_daes = list(dae_files)
+
+    clean_daes = [p for p in raw_daes if "_combined" not in p.name.lower() and "_sl" not in p.name.lower()]
+    clean_daes.sort(key=lambda p: (0 if "head" in p.name.lower() else 1, p.name))
+
+    dae_skin_info = parse_dae_skin_info(clean_daes)
     bind_world_pos = dae_skin_info.get('bind_world_pos', {})
 
     # Compute skeleton
@@ -442,14 +451,8 @@ def apply_exact_sl_shape_to_meshes(
                     w = g.weight
                     if w > 1e-4:
                         if jname == anchor_bone:
-                            # Anchor joint (mNeck seam): scale horizontally by s_eff around bone center
-                            # to match shaped body neck circumference, and translate vertically by delta_sl
-                            p_bind = bind_world_pos.get(anchor_bone, np.array([-0.0249, 0.0, 1.6071], dtype=np.float32))
-                            s_eff = eff_scales.get(anchor_bone, np.ones(3, dtype=np.float32))
-                            p_j = np.zeros(3, dtype=np.float32)
-                            p_j[0] = p_bind[0] + s_eff[0] * (p_sl[0] - p_bind[0])
-                            p_j[1] = p_bind[1] + s_eff[1] * (p_sl[1] - p_bind[1])
-                            p_j[2] = p_sl[2] + delta_sl[2]
+                            # Anchor joint (mNeck seam): follows neck seam vertical offset without horizontal distortion
+                            p_j = p_sl + delta_sl
                         else:
                             p_bind = bind_world_pos.get(jname, p_sl)
                             p_shaped = shaped_world_pos.get(jname, p_bind)

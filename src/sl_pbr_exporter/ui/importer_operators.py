@@ -205,6 +205,12 @@ class SL_OT_LoadSelectedItems(Operator):
                         body_mesh = o
                         break
 
+            unshaped_neck_z = None
+            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
+                neck_candidates_before = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                if neck_candidates_before:
+                    unshaped_neck_z = max(neck_candidates_before)
+
             try:
                 ensure_object_mode()
                 deselect_all_objects()
@@ -214,9 +220,13 @@ class SL_OT_LoadSelectedItems(Operator):
                 context.view_layer.update()
                 self.report({"INFO"}, f"Applied DevKit body shape: {shape_path.name}")
 
-                # Measure neck vertical offset deterministically from mNeck bone head
-                # 1.607073 is Second Life reference Bento height for mNeck
-                if devkit_arm.data and "mNeck" in devkit_arm.data.bones:
+                # Measure neck vertical offset directly from body mesh vertex seam (step 423 reference),
+                # with deterministic fallback to mNeck bone head
+                if body_mesh and unshaped_neck_z is not None:
+                    neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                    if neck_candidates_after:
+                        delta_neck_z = max(neck_candidates_after) - unshaped_neck_z
+                elif devkit_arm.data and "mNeck" in devkit_arm.data.bones:
                     delta_neck_z = devkit_arm.data.bones["mNeck"].head_local.z - 1.607073
                 elif "mNeck" in devkit_arm.pose.bones:
                     delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.607073
@@ -245,11 +255,13 @@ class SL_OT_LoadSelectedItems(Operator):
         # 4. Apply exact 1:1 SL shape to facial meshes & track neck height for hair
         if shape_path and total_imported_meshes:
             folder = shape_path.parent
+            selected_daes = [Path(item.path) for item in selected if item.item_type == "DAE" and Path(item.path).exists()]
             applied_count = apply_exact_sl_shape_to_meshes(
                 meshes=total_imported_meshes,
                 folder_path=folder,
                 shape_xml_path=shape_path,
                 delta_neck=delta_neck_z,
+                dae_files=selected_daes,
             )
             if applied_count > 0:
                 self.report({"INFO"}, f"Applied exact SL Bento face shape to {applied_count} mesh(es)")

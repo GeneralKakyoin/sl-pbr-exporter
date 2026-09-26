@@ -305,8 +305,8 @@ class TestShapeEngine(unittest.TestCase):
         bpy.data.objects.remove(body_obj, do_unlink=True)
         bpy.data.meshes.remove(body_mesh, do_unlink=True)
 
-    def test_neck_anchor_horizontal_scaling(self):
-        """Verify that mNeck anchor vertices scale horizontally by s_eff in X and Y."""
+    def test_neck_anchor_preserves_horizontal_coordinates(self):
+        """Verify that mNeck anchor vertices preserve horizontal (X, Y) coordinates without pinching distortion."""
         import bmesh
         mesh = bpy.data.meshes.new("TestNeckAnchorMesh")
         obj = bpy.data.objects.new("TestNeckAnchorObj", mesh)
@@ -329,7 +329,7 @@ class TestShapeEngine(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             folder = Path(tmpdir)
             shape_file = folder / "avatar_shape.xml"
-            # Neck scaled down to 0.75 in X and 0.80 in Y
+            # Neck scaled down in XML, but anchor vertices should preserve horizontal geometry
             shape_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
 <linden_genepool version="1.0">
     <archetype name="Test">
@@ -342,16 +342,17 @@ class TestShapeEngine(unittest.TestCase):
                 meshes=[obj],
                 folder_path=folder,
                 shape_xml_path=shape_file,
-                delta_neck=0.0,
+                delta_neck=-0.05,
             )
             self.assertEqual(count, 1)
             sk = mesh.shape_keys.key_blocks["SL_Avatar_Shape"]
-            # Verify that X and Y span of mNeck vertices has shrunk by exactly 0.75
-            neck_verts_orig = [mesh.vertices[i] for i in range(len(mesh.vertices) - 1)]
-            neck_verts_sk = [sk.data[i] for i in range(len(mesh.vertices) - 1)]
-            orig_dx = max(v.co.x for v in neck_verts_orig) - min(v.co.x for v in neck_verts_orig)
-            shaped_dx = max(v.co.x for v in neck_verts_sk) - min(v.co.x for v in neck_verts_sk)
-            self.assertAlmostEqual(shaped_dx / orig_dx, 0.75, places=2)
+            # Verify that X and Y coordinates of mNeck vertices are untouched, only Z shifted by delta_neck
+            for idx in range(len(mesh.vertices) - 1):
+                orig_v = mesh.vertices[idx]
+                sk_v = sk.data[idx]
+                self.assertAlmostEqual(sk_v.co.x, orig_v.co.x, places=4)
+                self.assertAlmostEqual(sk_v.co.y, orig_v.co.y, places=4)
+                self.assertAlmostEqual(sk_v.co.z - orig_v.co.z, -0.05, places=4)
 
         bpy.data.objects.remove(obj, do_unlink=True)
         bpy.data.meshes.remove(mesh, do_unlink=True)
