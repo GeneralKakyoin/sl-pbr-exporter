@@ -117,6 +117,11 @@ SL_SKELETON_HIERARCHY: Dict[str, Tuple[Optional[str], Tuple[float, float, float]
     'mToeLeft': ('mFootLeft', (0.163, -0.006, 0.007)),
 }
 
+FACIAL_BONE_NAMES = {
+    k for k in SL_SKELETON_HIERARCHY
+    if k.startswith('mFace') or k in ('mHead', 'mSkull', 'mEyeLeft', 'mEyeRight')
+}
+
 
 def parse_shape_xml_bones(shape_xml_path: Path) -> Dict[str, Dict[str, np.ndarray]]:
     """Parse bone position and scale from a Second Life shape XML."""
@@ -195,10 +200,12 @@ def compute_shaped_skeleton(
     shape_bones: Dict[str, Dict[str, Optional[np.ndarray]]],
     dae_skin_info: Dict[str, Any],
     anchor_bone: str = 'mNeck',
+    delta_neck: Optional[Any] = None,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """
     Computes effective scales (S_shape / S_bind) and forward-kinematics world positions
     anchored at anchor_bone (default: mNeck) to guarantee 100% gapless neck seam alignment.
+    If delta_neck is provided, the anchor joint and all descendants are shifted accordingly.
     """
     bind_scales = dae_skin_info.get('bind_scales', {})
     bind_world_pos = dae_skin_info.get('bind_world_pos', {})
@@ -207,9 +214,21 @@ def compute_shaped_skeleton(
     parent_map = {k: v[0] for k, v in SL_SKELETON_HIERARCHY.items()}
     default_pos_map = {k: np.array(v[1], dtype=np.float32) for k, v in SL_SKELETON_HIERARCHY.items()}
 
-    # Anchor position at anchor_bone bind position
+    delta_sl = np.zeros(3, dtype=np.float32)
+    if delta_neck is not None:
+        if isinstance(delta_neck, (int, float)):
+            delta_sl[2] = float(delta_neck)
+        elif hasattr(delta_neck, "__iter__"):
+            arr = np.array(list(delta_neck), dtype=np.float32)
+            if arr.ndim == 0:
+                delta_sl[2] = float(arr)
+            else:
+                n = min(3, len(arr))
+                delta_sl[:n] = arr[:n]
+
+    # Anchor position at anchor_bone bind position, offset by delta_sl
     anchor_bind_pos = bind_world_pos.get(anchor_bone, np.array([-0.0249, 0.0, 1.6071], dtype=np.float32))
-    shaped_world_pos: Dict[str, np.ndarray] = {anchor_bone: anchor_bind_pos.copy()}
+    shaped_world_pos: Dict[str, np.ndarray] = {anchor_bone: anchor_bind_pos + delta_sl}
 
     def get_bone_scale(name: str) -> np.ndarray:
         sb = shape_bones.get(name, {})
@@ -229,7 +248,7 @@ def compute_shaped_skeleton(
         parent = parent_map.get(name)
         pos = get_bone_local_pos(name)
         if not parent or parent == anchor_bone:
-            p_wp = anchor_bind_pos
+            p_wp = shaped_world_pos[anchor_bone]
             p_scale = get_bone_scale(anchor_bone)
         else:
             p_wp = get_shaped_pos(parent)
@@ -260,11 +279,15 @@ def apply_exact_sl_shape_to_meshes(
     shape_xml_path: Optional[Path] = None,
     shape_key_name: str = "SL_Avatar_Shape",
     anchor_bone: str = "mNeck",
+    delta_neck: Optional[Any] = None,
 ) -> int:
     """
     Applies Second Life GPU vertex shader transformation to the specified mesh objects.
     Deforms geometry using exact bone scale ratios and forward kinematics, saving the result
     as a non-destructive Shape Key (default value 1.0) while keeping Basis untouched.
+
+    If delta_neck is provided (scalar height delta or 3D offset vector in SL coordinates),
+    the neck anchor and facial joints track the body neck seam seamlessly.
 
     Returns the count of successfully deformed mesh objects.
     """
@@ -286,6 +309,18 @@ def apply_exact_sl_shape_to_meshes(
         print(f"[ShapeEngine] Shape XML {shape_xml_path.name} contains no bone definitions.")
         return 0
 
+    delta_sl = np.zeros(3, dtype=np.float32)
+    if delta_neck is not None:
+        if isinstance(delta_neck, (int, float)):
+            delta_sl[2] = float(delta_neck)
+        elif hasattr(delta_neck, "__iter__"):
+            arr = np.array(list(delta_neck), dtype=np.float32)
+            if arr.ndim == 0:
+                delta_sl[2] = float(arr)
+            else:
+                n = min(3, len(arr))
+                delta_sl[:n] = arr[:n]
+
     # Find and parse DAE files for skinning data
     dae_files = list(folder_path.glob("*.dae"))
     dae_skin_info = parse_dae_skin_info(dae_files)
@@ -293,13 +328,10 @@ def apply_exact_sl_shape_to_meshes(
 
     # Compute skeleton
     eff_scales, shaped_world_pos = compute_shaped_skeleton(
-        shape_bones, dae_skin_info, anchor_bone=anchor_bone
+        shape_bones, dae_skin_info, anchor_bone=anchor_bone, delta_neck=delta_sl
     )
 
-    facial_bone_names = {
-        k for k in SL_SKELETON_HIERARCHY
-        if k.startswith('mFace') or k in ('mHead', 'mSkull', 'mEyeLeft', 'mEyeRight')
-    }
+    facial_bone_names = FACIAL_BONE_NAMES
 
     deformed_count = 0
     for obj in meshes:
@@ -346,14 +378,35 @@ def apply_exact_sl_shape_to_meshes(
 
         sk.value = 1.0
 
+        # Determine whether the mesh is in Avastar/Blender space (-90 deg Z rotated)
+        # or native Second Life space (+X forward, +Y left).
+        is_avastar_space = (
+            obj.get("sl_aligned_to_devkit", False)
+            or (obj.parent and obj.parent.type == "ARMATURE")
+            or any(m.type == "ARMATURE" and m.object for m in obj.modifiers)
+        )
+
+        R_to_sl = np.array([
+            [0.0, -1.0, 0.0],
+            [1.0,  0.0, 0.0],
+            [0.0,  0.0, 1.0]
+        ], dtype=np.float32)
+
+        R_to_ava = np.array([
+            [ 0.0, 1.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [ 0.0, 0.0, 1.0]
+        ], dtype=np.float32)
+
         # Calculate exact vertex deformation
         verts = mesh.vertices
         for idx, v in enumerate(verts):
             # Original position in world space: BSM @ local_co
             p_world = (BSM @ np.array([v.co.x, v.co.y, v.co.z, 1.0], dtype=np.float32))[:3]
+            p_sl = R_to_sl @ p_world if is_avastar_space else p_world
 
             total_w = 0.0
-            p_def = np.zeros(3, dtype=np.float32)
+            p_def_sl = np.zeros(3, dtype=np.float32)
 
             for g in v.groups:
                 jname = vgroups.get(g.group)
@@ -361,24 +414,26 @@ def apply_exact_sl_shape_to_meshes(
                     w = g.weight
                     if w > 1e-4:
                         if jname == anchor_bone:
-                            # Anchor joint (mNeck seam): 0 displacement to preserve body alignment
-                            p_j = p_world
+                            # Anchor joint (mNeck seam): follows neck seam offset
+                            p_j = p_sl + delta_sl
                         else:
-                            p_bind = bind_world_pos.get(jname, p_world)
+                            p_bind = bind_world_pos.get(jname, p_sl)
                             p_shaped = shaped_world_pos.get(jname, p_bind)
                             s_eff = eff_scales[jname]
-                            p_j = p_shaped + s_eff * (p_world - p_bind)
+                            p_j = p_shaped + s_eff * (p_sl - p_bind)
 
-                        p_def += w * p_j
+                        p_def_sl += w * p_j
                         total_w += w
 
             if total_w > 0.0:
-                p_def /= total_w
+                p_def_sl /= total_w
             else:
-                p_def = p_world
+                p_def_sl = p_sl + delta_sl
+
+            p_def_world = R_to_ava @ p_def_sl if is_avastar_space else p_def_sl
 
             # Convert deformed world position back to local mesh space
-            p_def_4 = np.array([p_def[0], p_def[1], p_def[2], 1.0], dtype=np.float32)
+            p_def_4 = np.array([p_def_world[0], p_def_world[1], p_def_world[2], 1.0], dtype=np.float32)
             p_local = (inv_BSM @ p_def_4)[:3]
             sk.data[idx].co = p_local
 

@@ -149,6 +149,106 @@ class TestShapeEngine(unittest.TestCase):
         bpy.data.objects.remove(obj, do_unlink=True)
         bpy.data.meshes.remove(mesh, do_unlink=True)
 
+    def test_apply_sl_shape_to_avastar_aligned_mesh(self):
+        """Verify that apply_exact_sl_shape_to_meshes correctly converts coordinates for Avastar-aligned meshes."""
+        mesh = bpy.data.meshes.new("TestAvaHeadMesh")
+        obj = bpy.data.objects.new("TestAvaHeadObj", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+
+        import bmesh
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.2)
+        bm.to_mesh(mesh)
+        bm.free()
+
+        # Tag as aligned to devkit
+        obj["sl_aligned_to_devkit"] = True
+
+        # Add vertex group for mFaceNoseCenter
+        vg = obj.vertex_groups.new(name="mFaceNoseCenter")
+        for v in mesh.vertices:
+            vg.add([v.index], 1.0, 'REPLACE')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            shape_file = folder / "avatar_shape.xml"
+            shape_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<linden_genepool version="1.0">
+    <archetype name="Test">
+        <bone name="mFaceNoseCenter" position="0.10 0.0 0.0" scale="0.70 0.70 0.70"/>
+        <bone name="mNeck" position="0.0 0.0 0.25" scale="1.0 1.0 1.0"/>
+    </archetype>
+</linden_genepool>""")
+
+            count = apply_exact_sl_shape_to_meshes(
+                meshes=[obj],
+                folder_path=folder,
+                shape_xml_path=shape_file,
+            )
+
+            self.assertEqual(count, 1)
+            self.assertIsNotNone(mesh.shape_keys)
+            self.assertIn("SL_Avatar_Shape", mesh.shape_keys.key_blocks)
+            sk = mesh.shape_keys.key_blocks["SL_Avatar_Shape"]
+            self.assertEqual(sk.value, 1.0)
+
+        bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.meshes.remove(mesh, do_unlink=True)
+
+    def test_apply_sl_shape_with_delta_neck(self):
+        """Verify that delta_neck offset shifts deformed vertices along Z to match shaped neck."""
+        mesh = bpy.data.meshes.new("TestNeckMesh")
+        obj = bpy.data.objects.new("TestNeckObj", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+
+        import bmesh
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.2)
+        bm.to_mesh(mesh)
+        bm.free()
+
+        vg = obj.vertex_groups.new(name="mFaceNoseCenter")
+        for v in mesh.vertices:
+            vg.add([v.index], 1.0, 'REPLACE')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            shape_file = folder / "avatar_shape.xml"
+            shape_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<linden_genepool version="1.0">
+    <archetype name="Test">
+        <bone name="mFaceNoseCenter" position="0.10 0.0 0.0" scale="1.0 1.0 1.0"/>
+        <bone name="mNeck" position="0.0 0.0 0.25" scale="1.0 1.0 1.0"/>
+    </archetype>
+</linden_genepool>""")
+
+            # Apply without delta_neck first
+            apply_exact_sl_shape_to_meshes(
+                meshes=[obj],
+                folder_path=folder,
+                shape_xml_path=shape_file,
+                delta_neck=0.0,
+            )
+            sk0 = [p.co.copy() for p in mesh.shape_keys.key_blocks["SL_Avatar_Shape"].data]
+
+            # Apply with delta_neck = -0.05
+            count = apply_exact_sl_shape_to_meshes(
+                meshes=[obj],
+                folder_path=folder,
+                shape_xml_path=shape_file,
+                delta_neck=-0.05,
+            )
+
+            self.assertEqual(count, 1)
+            sk1 = [p.co.copy() for p in mesh.shape_keys.key_blocks["SL_Avatar_Shape"].data]
+
+            # Verify all shape key coordinates were lowered by exactly 0.05 along Z
+            for p0, p1 in zip(sk0, sk1):
+                self.assertAlmostEqual(p0.z - p1.z, 0.05, places=4)
+
+        bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.meshes.remove(mesh, do_unlink=True)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -104,6 +104,7 @@ def align_item_to_devkit(mesh_obj: bpy.types.Object) -> None:
     mesh_obj.matrix_world = R @ mesh_obj.matrix_world
     mesh_obj.data.transform(mesh_obj.matrix_world)
     mesh_obj.matrix_world = mathutils.Matrix.Identity(4)
+    mesh_obj["sl_aligned_to_devkit"] = True
     mesh_obj.data.update()
 
 
@@ -410,6 +411,43 @@ def wire_material_textures(
             spec_sock.default_value = 0.9
 
 
+def hide_inactive_linkset_meshes(meshes: List[bpy.types.Object]) -> None:
+    """Hide dummy collision hulls (< 30 verts) and inactive/zero-alpha linkset submeshes (e.g. legacy head UVs)."""
+    for mesh_obj in meshes:
+        if not mesh_obj or mesh_obj.type != "MESH" or not mesh_obj.data:
+            continue
+        if len(mesh_obj.data.vertices) < 30:
+            mesh_obj.hide_viewport = True
+            mesh_obj.hide_render = True
+            continue
+
+        valid_slots = [s for s in mesh_obj.material_slots if s.material]
+        if not valid_slots:
+            continue
+
+        is_all_transparent = True
+        for s in valid_slots:
+            m = s.material
+            alpha = 1.0
+            if m.use_nodes and m.node_tree:
+                bsdf = next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+                if bsdf and "Alpha" in bsdf.inputs:
+                    if bsdf.inputs["Alpha"].is_linked:
+                        is_all_transparent = False
+                        break
+                    alpha = bsdf.inputs["Alpha"].default_value
+            elif hasattr(m, "diffuse_color"):
+                alpha = m.diffuse_color[3]
+
+            if alpha > 0.01:
+                is_all_transparent = False
+                break
+
+        if is_all_transparent:
+            mesh_obj.hide_viewport = True
+            mesh_obj.hide_render = True
+
+
 def import_and_bind_item(
     dae_path: Path,
     devkit_arm: Optional[bpy.types.Object] = None,
@@ -570,36 +608,9 @@ def import_and_bind_item(
                 dae_dir=dae_path.parent,
             )
 
-    # Hide zero-alpha helper shells & cutouts
-    for mesh_obj in imported_meshes:
-        all_zero = False
-        if len(mesh_obj.data.vertices) <= 4:
-            all_zero = True
-        else:
-            valid_slots = [s for s in mesh_obj.material_slots if s.material]
-            if valid_slots:
-                zero_count = 0
-                for s in valid_slots:
-                    m = s.material
-                    bsdf = (
-                        next((n for n in m.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
-                        if m.use_nodes and m.node_tree
-                        else None
-                    )
-                    if hasattr(m, "diffuse_color") and m.diffuse_color[3] == 0.0:
-                        zero_count += 1
-                    elif (
-                        bsdf
-                        and "Alpha" in bsdf.inputs
-                        and not bsdf.inputs["Alpha"].is_linked
-                        and bsdf.inputs["Alpha"].default_value == 0.0
-                    ):
-                        zero_count += 1
-                if zero_count == len(valid_slots):
-                    all_zero = True
-
-        if all_zero:
-            mesh_obj.hide_viewport = True
-            mesh_obj.hide_render = True
+    # Hide zero-alpha helper shells & cutouts (< 30 verts or all zero alpha)
+    hide_inactive_linkset_meshes(imported_meshes)
 
     return imported_meshes
+
+

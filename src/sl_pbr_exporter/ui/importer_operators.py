@@ -7,6 +7,8 @@ import bpy
 from bpy.props import BoolProperty, CollectionProperty, IntProperty, PointerProperty, StringProperty
 from bpy.types import Operator, PropertyGroup, UIList
 
+import mathutils
+
 from ..config import (
     DEFAULT_DEVKIT_DIR,
     DEFAULT_MESH_EXPORT_DIR,
@@ -18,11 +20,14 @@ from ..importer.devkit_binder import (
     align_item_to_devkit,
     append_devkit_from_blend,
     get_devkit_armature,
+    hide_inactive_linkset_meshes,
     import_and_bind_item,
     setup_devkit_visibility,
 )
 from ..importer.mesh_resolver import scan_directory_items
-from ..importer.shape_loader import apply_shape_xml, find_shape_xml
+from ..importer.shape_loader import apply_shape_xml, find_shape_xml, parse_shape_xml
+from ..importer.sl_shape_engine import apply_exact_sl_shape_to_meshes, FACIAL_BONE_NAMES
+
 
 
 class SL_ItemChecklistItem(PropertyGroup):
@@ -158,13 +163,14 @@ class SL_OT_LoadSelectedItems(Operator):
             self.report({"WARNING"}, "No items selected. Check at least one item to load.")
             return {"CANCELLED"}
 
-        # 1. Resolve DevKit Armature
+        # 1. Resolve DevKit Armature & Body
         devkit_arm = get_devkit_armature(context.scene)
+        devkit_body = None
         if not devkit_arm and props.auto_append_devkit:
             dk_path = Path(bpy.path.abspath(props.devkit_blend_path.strip())) if props.devkit_blend_path else None
             if dk_path and dk_path.exists():
                 try:
-                    devkit_arm, _ = append_devkit_from_blend(dk_path)
+                    devkit_arm, devkit_body = append_devkit_from_blend(dk_path)
                     self.report({"INFO"}, f"Appended DevKit from {dk_path.name}")
                 except Exception as e:
                     self.report({"ERROR"}, f"Failed to append DevKit: {e}")
@@ -177,7 +183,47 @@ class SL_OT_LoadSelectedItems(Operator):
         # Clean devkit visibility (keep RebornBody visible, hide alternate meshes)
         setup_devkit_visibility()
 
-        # 2. Import and bind checked items
+        # 2. If apply_shape is enabled, shape the DevKit armature & body FIRST
+        # This prevents Avastar's import_shape from displacing child items later.
+        shape_path = None
+        delta_neck_z = 0.0
+        folder = Path(bpy.path.abspath(props.folder_path.strip())) if props.folder_path else None
+        if props.apply_shape and folder:
+            shape_path = find_shape_xml(folder)
+
+        if shape_path and devkit_arm and hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
+            body_mesh = devkit_body or context.scene.objects.get("RebornBody")
+            if not body_mesh:
+                for o in context.scene.objects:
+                    if o.type == "MESH" and "body" in o.name.lower() and o.data and len(o.data.vertices) > 0:
+                        body_mesh = o
+                        break
+
+            unshaped_neck_z = None
+            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
+                neck_candidates = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                if neck_candidates:
+                    unshaped_neck_z = max(neck_candidates)
+
+            try:
+                ensure_object_mode()
+                deselect_all_objects()
+                devkit_arm.select_set(True)
+                context.view_layer.objects.active = devkit_arm
+                bpy.ops.avastar.import_shape(filepath=str(shape_path))
+                self.report({"INFO"}, f"Applied DevKit body shape: {shape_path.name}")
+
+                if body_mesh and unshaped_neck_z is not None:
+                    neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                    if neck_candidates_after:
+                        shaped_neck_z = max(neck_candidates_after)
+                        delta_neck_z = shaped_neck_z - unshaped_neck_z
+                elif "mNeck" in devkit_arm.pose.bones:
+                    delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.60707
+            except Exception as e:
+                self.report({"WARNING"}, f"DevKit body shape application warning: {e}")
+
+        # 3. Import and bind checked items onto the (already shaped) DevKit
         total_imported_meshes = []
         for item in selected:
             f_path = Path(item.path)
@@ -192,22 +238,55 @@ class SL_OT_LoadSelectedItems(Operator):
             except Exception as e:
                 self.report({"ERROR"}, f"Error importing '{item.name}': {e}")
 
-        # 3. Apply Shape XML if requested
-        if props.apply_shape:
-            folder = Path(bpy.path.abspath(props.folder_path.strip())) if props.folder_path else None
-            if folder:
-                shape_path = find_shape_xml(folder)
-                if shape_path:
-                    applied = apply_shape_xml(shape_path, devkit_arm=devkit_arm, objects=total_imported_meshes)
-                    if applied:
-                        self.report({"INFO"}, f"Applied avatar shape: {shape_path.name}")
+        # Inactive linkset meshes (< 30 verts or all zero alpha) are auto-hidden by import_and_bind_item,
+        # but run explicitly here across all meshes to ensure complete consistency.
+        hide_inactive_linkset_meshes(total_imported_meshes)
 
-        # Select all imported meshes
+        # 4. Apply exact 1:1 SL shape to facial meshes & track neck height for hair
+        if shape_path and total_imported_meshes:
+            folder = shape_path.parent
+            applied_count = apply_exact_sl_shape_to_meshes(
+                meshes=total_imported_meshes,
+                folder_path=folder,
+                shape_xml_path=shape_path,
+                delta_neck=delta_neck_z,
+            )
+            if applied_count > 0:
+                self.report({"INFO"}, f"Applied exact SL Bento face shape to {applied_count} mesh(es)")
+
+            # Shift hair / head attachments to track neck height
+            if abs(delta_neck_z) > 1e-5:
+                for obj in total_imported_meshes:
+                    if obj.type != "MESH" or not obj.data or not obj.vertex_groups:
+                        continue
+                    vnames = {g.index: g.name for g in obj.vertex_groups}
+                    has_head = any(vnames.get(g.group) in ("mHead", "HEAD") for v in obj.data.vertices for g in v.groups if g.weight > 0.05)
+                    has_facial = any(vnames.get(g.group) in FACIAL_BONE_NAMES for v in obj.data.vertices for g in v.groups if g.weight > 0.05)
+                    if has_head and not has_facial:
+                        curr_delta = obj.get("sl_neck_delta_applied", 0.0)
+                        delta_to_apply = delta_neck_z - curr_delta
+                        if abs(delta_to_apply) > 1e-5:
+                            T = mathutils.Matrix.Translation((0.0, 0.0, delta_to_apply))
+                            obj.data.transform(T)
+                            obj["sl_neck_delta_applied"] = delta_neck_z
+                            obj.data.update()
+
+            # Store slider parameters as custom scene properties
+            data = parse_shape_xml(shape_path)
+            if data and "params" in data:
+                scene = context.scene
+                scene["sl_shape_name"] = data.get("archetype", "Custom")
+                for k, v in data["params"].items():
+                    prop_key = f"sl_shape_{k.replace(' ', '_')}"
+                    scene[prop_key] = v
+
+        # Select all visible imported meshes
         deselect_all_objects()
-        for m in total_imported_meshes:
+        visible_imported = [m for m in total_imported_meshes if not m.hide_viewport]
+        for m in visible_imported:
             m.select_set(True)
-        if total_imported_meshes:
-            context.view_layer.objects.active = total_imported_meshes[0]
+        if visible_imported:
+            context.view_layer.objects.active = visible_imported[0]
 
         # Switch 3D Viewport shading to Material Preview so materials and textures are visible
         try:
@@ -224,6 +303,7 @@ class SL_OT_LoadSelectedItems(Operator):
 
         self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto '{devkit_arm.name}' rig with textures!")
         return {"FINISHED"}
+
 
 
 class SL_OT_TransferWeights(Operator):
