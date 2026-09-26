@@ -478,3 +478,177 @@ def apply_exact_sl_shape_to_meshes(
 
     print(f"[ShapeEngine] Successfully applied 1:1 Second Life shape '{shape_xml_path.name}' to {deformed_count} mesh object(s).")
     return deformed_count
+
+
+COLLISION_TO_DEFORMATION_PARENT: Dict[str, str] = {
+    'HEAD': 'mHead',
+    'NECK': 'mNeck',
+    'CHEST': 'mChest',
+    'LEFT_PEC': 'mChest',
+    'RIGHT_PEC': 'mChest',
+    'UPPER_BACK': 'mChest',
+    'BELLY': 'mTorso',
+    'LEFT_HANDLE': 'mTorso',
+    'RIGHT_HANDLE': 'mTorso',
+    'LOWER_BACK': 'mTorso',
+    'PELVIS': 'mPelvis',
+    'BUTT': 'mPelvis',
+    'mFaceRoot': 'mHead',
+}
+
+DEFAULT_AVASTAR_BIND_POSITIONS: Dict[str, np.ndarray] = {
+    'HEAD': np.array([0.0, 0.004875, 1.752703], dtype=np.float32),
+    'mHead': np.array([0.0, 0.024875, 1.682703], dtype=np.float32),
+    'mSkull': np.array([0.0, 0.024875, 1.761703], dtype=np.float32),
+    'mFaceRoot': np.array([0.0, -0.000125, 1.727702], dtype=np.float32),
+    'mNeck': np.array([0.0, 0.024875, 1.607073], dtype=np.float32),
+    'NECK': np.array([0.0, 0.024875, 1.627073], dtype=np.float32),
+    'mChest': np.array([0.0, 0.015368, 1.355965], dtype=np.float32),
+    'CHEST': np.array([0.0, -0.012632, 1.425965], dtype=np.float32),
+    'LEFT_PEC': np.array([0.082, -0.103632, 1.397965], dtype=np.float32),
+    'RIGHT_PEC': np.array([-0.082, -0.103632, 1.397965], dtype=np.float32),
+    'UPPER_BACK': np.array([0.0, 0.015368, 1.372965], dtype=np.float32),
+    'mSpine4': np.array([0.0, 0.015368, 1.150965], dtype=np.float32),
+    'mSpine3': np.array([0.0, 0.0, 1.355965], dtype=np.float32),
+    'mTorso': np.array([0.0, 0.0, 1.150965], dtype=np.float32),
+    'mSpine2': np.array([0.0, 0.0, 1.066965], dtype=np.float32),
+    'mSpine1': np.array([0.0, 0.0, 1.150965], dtype=np.float32),
+    'mPelvis': np.array([0.0, 0.0, 1.066965], dtype=np.float32),
+}
+
+
+def is_rigged_hair_or_attachment(obj: bpy.types.Object) -> bool:
+    """
+    Identifies whether a mesh object is a rigged hair or head attachment item.
+    Returns True only if:
+    - Object is a mesh with vertex groups (rigged). Unrigged meshes return False.
+    - Has weights on HEAD_ATTACHMENT_BONES (HEAD, mHead, mSkull, mFaceRoot).
+    - Has NO weights on BENTO_FACIAL_FEATURE_BONES (ensures Bento head, eyes, ears,
+      lashes, teeth, tongue are processed exclusively by the Bento facial engine).
+    """
+    if not obj or obj.type != 'MESH' or not obj.data or not obj.vertex_groups:
+        return False
+
+    vgroups = {g.index: g.name for g in obj.vertex_groups}
+
+    has_head_weight = False
+    has_bento_facial_weight = False
+
+    for v in obj.data.vertices:
+        for g in v.groups:
+            if g.weight > 0.01:
+                bname = vgroups.get(g.group)
+                if bname in HEAD_ATTACHMENT_BONES:
+                    has_head_weight = True
+                elif bname in BENTO_FACIAL_FEATURE_BONES:
+                    has_bento_facial_weight = True
+        if has_bento_facial_weight:
+            return False
+
+    return has_head_weight and not has_bento_facial_weight
+
+
+def apply_exact_sl_shape_to_rigged_hair(
+    meshes: List[bpy.types.Object],
+    devkit_arm: Optional[bpy.types.Object],
+    shape_bones: Dict[str, Dict[str, Optional[np.ndarray]]],
+    shape_key_name: str = "SL_Avatar_Shape",
+) -> int:
+    """
+    Applies exact Second Life bone scale and forward kinematics deformation to rigged hair
+    and head attachments. Rigged hair meshes (weighted to HEAD_ATTACHMENT_BONES, with no
+    Bento facial feature weights) are deformed non-destructively via an SL_Avatar_Shape
+    shape key, perfectly matching the avatar's shaped head size and position without
+    artificial gap or floating.
+
+    Unrigged objects (0 vertex groups) are completely untouched.
+    """
+    if not devkit_arm or not shape_bones:
+        return 0
+
+    # 1. Determine bind bone positions (Avastar/Blender space)
+    bind_bone_pos = dict(DEFAULT_AVASTAR_BIND_POSITIONS)
+
+    # 2. Determine shaped bone positions from devkit_arm (Avastar/Blender space)
+    shaped_bone_pos: Dict[str, np.ndarray] = {}
+    for bname in bind_bone_pos:
+        b = devkit_arm.data.bones.get(bname)
+        if b:
+            shaped_bone_pos[bname] = np.array(b.head_local, dtype=np.float32)
+
+    for bname, p_bind in bind_bone_pos.items():
+        if bname not in shaped_bone_pos:
+            shaped_bone_pos[bname] = p_bind
+
+    # 3. Determine bone shape scales (with collision bones inheriting from deformation parent)
+    bone_scales: Dict[str, np.ndarray] = {}
+    for bname in bind_bone_pos:
+        sb = shape_bones.get(bname)
+        if sb and sb.get('scale') is not None:
+            s_sl = sb['scale']
+        else:
+            pname = COLLISION_TO_DEFORMATION_PARENT.get(bname)
+            if pname and pname in shape_bones and shape_bones[pname].get('scale') is not None:
+                s_sl = shape_bones[pname]['scale']
+            else:
+                s_sl = np.ones(3, dtype=np.float32)
+
+        # Convert SL space scale (X forward, Y left, Z up) to Avastar space (X left, Y -forward, Z up):
+        bone_scales[bname] = np.array([s_sl[1], s_sl[0], s_sl[2]], dtype=np.float32)
+
+    deformed_count = 0
+    for obj in meshes:
+        if not is_rigged_hair_or_attachment(obj):
+            continue
+
+        vgroups = {g.index: g.name for g in obj.vertex_groups}
+        mesh = obj.data
+
+        # Revert any naive vertical translation if previously applied
+        prev_d = obj.get("sl_neck_delta_applied", 0.0)
+        if abs(prev_d) > 1e-5:
+            import mathutils
+            obj.data.transform(mathutils.Matrix.Translation((0.0, 0.0, -prev_d)))
+            obj["sl_neck_delta_applied"] = 0.0
+            obj.data.update()
+
+        # Setup shape keys
+        if not mesh.shape_keys:
+            obj.shape_key_add(name="Basis", from_mix=False)
+
+        sk = mesh.shape_keys.key_blocks.get(shape_key_name)
+        if not sk:
+            sk = obj.shape_key_add(name=shape_key_name, from_mix=False)
+
+        sk.value = 1.0
+
+        # Calculate exact vertex deformation
+        verts = mesh.vertices
+        for idx, vert in enumerate(verts):
+            co = np.array(vert.co, dtype=np.float32)
+            total_w = 0.0
+            p_def = np.zeros(3, dtype=np.float32)
+
+            for g in vert.groups:
+                jname = vgroups.get(g.group)
+                w = g.weight
+                if w > 0.001 and jname in bind_bone_pos and jname in shaped_bone_pos and jname in bone_scales:
+                    p_bind = bind_bone_pos[jname]
+                    p_shaped = shaped_bone_pos[jname]
+                    s_ava = bone_scales[jname]
+                    p_j = p_shaped + s_ava * (co - p_bind)
+                    p_def += w * p_j
+                    total_w += w
+
+            if total_w > 0.0:
+                p_def /= total_w
+            else:
+                p_def = co
+
+            sk.data[idx].co = p_def
+
+        deformed_count += 1
+
+    print(f"[ShapeEngine] Successfully applied 1:1 SL bone shape to {deformed_count} rigged hair/attachment mesh object(s).")
+    return deformed_count
+

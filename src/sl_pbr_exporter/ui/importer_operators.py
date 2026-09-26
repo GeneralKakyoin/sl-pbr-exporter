@@ -28,6 +28,8 @@ from ..importer.mesh_resolver import scan_directory_items
 from ..importer.shape_loader import apply_shape_xml, find_shape_xml, parse_shape_xml
 from ..importer.sl_shape_engine import (
     apply_exact_sl_shape_to_meshes,
+    apply_exact_sl_shape_to_rigged_hair,
+    parse_shape_xml_bones,
     FACIAL_BONE_NAMES,
     BENTO_FACIAL_FEATURE_BONES,
     BODY_TORSO_BONES,
@@ -252,7 +254,7 @@ class SL_OT_LoadSelectedItems(Operator):
         # but run explicitly here across all meshes to ensure complete consistency.
         hide_inactive_linkset_meshes(total_imported_meshes)
 
-        # 4. Apply exact 1:1 SL shape to facial meshes & track neck height for hair
+        # 4. Apply exact 1:1 SL shape to facial meshes
         if shape_path and total_imported_meshes:
             folder = shape_path.parent
             selected_daes = [Path(item.path) for item in selected if item.item_type == "DAE" and Path(item.path).exists()]
@@ -266,34 +268,15 @@ class SL_OT_LoadSelectedItems(Operator):
             if applied_count > 0:
                 self.report({"INFO"}, f"Applied exact SL Bento face shape to {applied_count} mesh(es)")
 
-            # Shift hair / head attachments to track neck height
-            if abs(delta_neck_z) > 1e-5:
-                for obj in total_imported_meshes:
-                    if obj.type != "MESH" or not obj.data or not obj.vertex_groups:
-                        continue
-                    vnames = {g.index: g.name for g in obj.vertex_groups}
-                    has_head = any(
-                        vnames.get(g.group) in HEAD_ATTACHMENT_BONES
-                        for v in obj.data.vertices for g in v.groups if g.weight > 0.05
-                    )
-                    has_facial = any(
-                        vnames.get(g.group) in BENTO_FACIAL_FEATURE_BONES
-                        for v in obj.data.vertices for g in v.groups if g.weight > 0.05
-                    )
-                    has_body = any(
-                        vnames.get(g.group) in BODY_TORSO_BONES
-                        for v in obj.data.vertices for g in v.groups if g.weight > 0.05
-                    )
-                    is_facial_mesh = has_facial and not has_body
-
-                    if has_head and not is_facial_mesh:
-                        curr_delta = obj.get("sl_neck_delta_applied", 0.0)
-                        delta_to_apply = delta_neck_z - curr_delta
-                        if abs(delta_to_apply) > 1e-5:
-                            T = mathutils.Matrix.Translation((0.0, 0.0, delta_to_apply))
-                            obj.data.transform(T)
-                            obj["sl_neck_delta_applied"] = delta_neck_z
-                            obj.data.update()
+            # 5. Apply exact 1:1 SL bone shape to rigged hair and head attachments
+            shape_bones = parse_shape_xml_bones(shape_path)
+            hair_count = apply_exact_sl_shape_to_rigged_hair(
+                meshes=total_imported_meshes,
+                devkit_arm=devkit_arm,
+                shape_bones=shape_bones,
+            )
+            if hair_count > 0:
+                self.report({"INFO"}, f"Applied exact SL bone shape to {hair_count} rigged hair/attachment mesh(es)")
 
             # Store slider parameters as custom scene properties
             data = parse_shape_xml(shape_path)

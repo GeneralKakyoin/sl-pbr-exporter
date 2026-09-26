@@ -14,6 +14,8 @@ from sl_pbr_exporter.importer.sl_shape_engine import (
     parse_dae_skin_info,
     compute_shaped_skeleton,
     apply_exact_sl_shape_to_meshes,
+    apply_exact_sl_shape_to_rigged_hair,
+    is_rigged_hair_or_attachment,
 )
 
 
@@ -357,7 +359,121 @@ class TestShapeEngine(unittest.TestCase):
         bpy.data.objects.remove(obj, do_unlink=True)
         bpy.data.meshes.remove(mesh, do_unlink=True)
 
+    def test_is_rigged_hair_or_attachment_classification(self):
+        """Verify that rigged hair is recognized, while unrigged meshes and facial meshes are excluded."""
+        import bmesh
+
+        # 1. Unrigged mesh (0 vertex groups)
+        unrigged_mesh = bpy.data.meshes.new("UnriggedMesh")
+        unrigged_obj = bpy.data.objects.new("UnriggedObj", unrigged_mesh)
+        bpy.context.scene.collection.objects.link(unrigged_obj)
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.1)
+        bm.to_mesh(unrigged_mesh)
+        bm.free()
+
+        self.assertFalse(is_rigged_hair_or_attachment(unrigged_obj))
+
+        # 2. Bento facial mesh (has mFaceNoseCenter)
+        face_mesh = bpy.data.meshes.new("FaceMesh")
+        face_obj = bpy.data.objects.new("FaceObj", face_mesh)
+        bpy.context.scene.collection.objects.link(face_obj)
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.1)
+        bm.to_mesh(face_mesh)
+        bm.free()
+        vg_face = face_obj.vertex_groups.new(name="mFaceNoseCenter")
+        vg_face.add([0], 1.0, 'REPLACE')
+
+        self.assertFalse(is_rigged_hair_or_attachment(face_obj))
+
+        # 3. Rigged hair mesh (weighted to HEAD and mHead, no facial bones)
+        hair_mesh = bpy.data.meshes.new("HairMesh")
+        hair_obj = bpy.data.objects.new("HairObj", hair_mesh)
+        bpy.context.scene.collection.objects.link(hair_obj)
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.1)
+        bm.to_mesh(hair_mesh)
+        bm.free()
+        vg_head = hair_obj.vertex_groups.new(name="HEAD")
+        vg_head.add([0], 1.0, 'REPLACE')
+
+        self.assertTrue(is_rigged_hair_or_attachment(hair_obj))
+
+        # Clean up
+        for o, m in [(unrigged_obj, unrigged_mesh), (face_obj, face_mesh), (hair_obj, hair_mesh)]:
+            bpy.data.objects.remove(o, do_unlink=True)
+            bpy.data.meshes.remove(m, do_unlink=True)
+
+    def test_apply_exact_sl_shape_to_rigged_hair(self):
+        """Verify that rigged hair is deformed using exact bone position and scale, while unrigged is untouched."""
+        import bmesh
+
+        # Create rigged hair cube at head level (Z = 1.75)
+        hair_mesh = bpy.data.meshes.new("HairMesh")
+        hair_obj = bpy.data.objects.new("HairObj", hair_mesh)
+        bpy.context.scene.collection.objects.link(hair_obj)
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.1)
+        for v in bm.verts:
+            v.co.z += 1.75
+        bm.to_mesh(hair_mesh)
+        bm.free()
+        vg = hair_obj.vertex_groups.new(name="HEAD")
+        for v in hair_mesh.vertices:
+            vg.add([v.index], 1.0, 'REPLACE')
+
+        # Create unrigged accessory cube
+        unrigged_mesh = bpy.data.meshes.new("UnriggedMesh")
+        unrigged_obj = bpy.data.objects.new("UnriggedObj", unrigged_mesh)
+        bpy.context.scene.collection.objects.link(unrigged_obj)
+        bm2 = bmesh.new()
+        bmesh.ops.create_cube(bm2, size=0.1)
+        bm2.to_mesh(unrigged_mesh)
+        bm2.free()
+
+        # Create mock armature with HEAD bone lowered to 1.58 (as on shaped avatar)
+        arm_data = bpy.data.armatures.new("MockAvatar")
+        arm_obj = bpy.data.objects.new("MockAvatar", arm_data)
+        bpy.context.scene.collection.objects.link(arm_obj)
+        bpy.context.view_layer.objects.active = arm_obj
+        bpy.ops.object.mode_set(mode='EDIT')
+        b = arm_data.edit_bones.new("HEAD")
+        b.head = (0.0, 0.0051, 1.5822)
+        b.tail = (0.0, 0.0051, 1.6822)
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        shape_bones = {
+            'mHead': {'scale': np.array([0.89, 0.89, 0.89], dtype=np.float32), 'pos': np.zeros(3, dtype=np.float32)}
+        }
+
+        count = apply_exact_sl_shape_to_rigged_hair(
+            meshes=[hair_obj, unrigged_obj],
+            devkit_arm=arm_obj,
+            shape_bones=shape_bones,
+        )
+
+        # Only rigged hair should be deformed
+        self.assertEqual(count, 1)
+        self.assertIsNotNone(hair_mesh.shape_keys)
+        self.assertIn("SL_Avatar_Shape", hair_mesh.shape_keys.key_blocks)
+        self.assertIsNone(unrigged_mesh.shape_keys)
+
+        # Verify hair was lowered and scaled down properly (from ~1.75 down to ~1.58)
+        sk_head = hair_mesh.shape_keys.key_blocks["SL_Avatar_Shape"]
+        for p in sk_head.data:
+            self.assertLess(p.co.z, 1.70)
+            self.assertGreater(p.co.z, 1.45)
+
+        # Clean up
+        for o, m in [(hair_obj, hair_mesh), (unrigged_obj, unrigged_mesh)]:
+            bpy.data.objects.remove(o, do_unlink=True)
+            bpy.data.meshes.remove(m, do_unlink=True)
+        bpy.data.objects.remove(arm_obj, do_unlink=True)
+        bpy.data.armatures.remove(arm_data, do_unlink=True)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
