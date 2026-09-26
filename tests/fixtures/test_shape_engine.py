@@ -249,6 +249,114 @@ class TestShapeEngine(unittest.TestCase):
         bpy.data.objects.remove(obj, do_unlink=True)
         bpy.data.meshes.remove(mesh, do_unlink=True)
 
+    def test_hair_and_body_exclusion_from_facial_shape(self):
+        """Verify that hair (weighted to mFaceRoot or UPPER_BACK) and body meshes are excluded from SL_Avatar_Shape."""
+        import bmesh
+
+        # Mesh 1: Hair mesh weighted to mFaceRoot only
+        hair_mesh = bpy.data.meshes.new("TestHairMesh")
+        hair_obj = bpy.data.objects.new("TestHairObj", hair_mesh)
+        bpy.context.scene.collection.objects.link(hair_obj)
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.2)
+        bm.to_mesh(hair_mesh)
+        bm.free()
+        vg_root = hair_obj.vertex_groups.new(name="mFaceRoot")
+        for v in hair_mesh.vertices:
+            vg_root.add([v.index], 1.0, 'REPLACE')
+
+        # Mesh 2: Body mesh weighted to mChest and UPPER_BACK
+        body_mesh = bpy.data.meshes.new("TestBodyMesh")
+        body_obj = bpy.data.objects.new("TestBodyObj", body_mesh)
+        bpy.context.scene.collection.objects.link(body_obj)
+        bm2 = bmesh.new()
+        bmesh.ops.create_cube(bm2, size=0.2)
+        bm2.to_mesh(body_mesh)
+        bm2.free()
+        vg_chest = body_obj.vertex_groups.new(name="mChest")
+        vg_back = body_obj.vertex_groups.new(name="UPPER_BACK")
+        for v in body_mesh.vertices:
+            vg_chest.add([v.index], 0.5, 'REPLACE')
+            vg_back.add([v.index], 0.5, 'REPLACE')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            shape_file = folder / "avatar_shape.xml"
+            shape_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<linden_genepool version="1.0">
+    <archetype name="Test">
+        <bone name="mFaceNoseCenter" position="0.10 0.0 0.0" scale="0.70 0.70 0.70"/>
+        <bone name="mNeck" position="0.0 0.0 0.25" scale="1.0 1.0 1.0"/>
+    </archetype>
+</linden_genepool>""")
+
+            count = apply_exact_sl_shape_to_meshes(
+                meshes=[hair_obj, body_obj],
+                folder_path=folder,
+                shape_xml_path=shape_file,
+            )
+            # Neither hair nor body should be deformed
+            self.assertEqual(count, 0)
+            self.assertIsNone(hair_mesh.shape_keys)
+            self.assertIsNone(body_mesh.shape_keys)
+
+        bpy.data.objects.remove(hair_obj, do_unlink=True)
+        bpy.data.meshes.remove(hair_mesh, do_unlink=True)
+        bpy.data.objects.remove(body_obj, do_unlink=True)
+        bpy.data.meshes.remove(body_mesh, do_unlink=True)
+
+    def test_neck_anchor_horizontal_scaling(self):
+        """Verify that mNeck anchor vertices scale horizontally by s_eff in X and Y."""
+        import bmesh
+        mesh = bpy.data.meshes.new("TestNeckAnchorMesh")
+        obj = bpy.data.objects.new("TestNeckAnchorObj", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=0.2)
+        bm.to_mesh(mesh)
+        bm.free()
+
+        # Qualify as a facial mesh with mFaceJaw on the last vertex, and mNeck on the others
+        vg_neck = obj.vertex_groups.new(name="mNeck")
+        vg_jaw = obj.vertex_groups.new(name="mFaceJaw")
+        for idx, v in enumerate(mesh.vertices):
+            if idx == len(mesh.vertices) - 1:
+                vg_jaw.add([v.index], 1.0, 'REPLACE')
+            else:
+                vg_neck.add([v.index], 1.0, 'REPLACE')
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            shape_file = folder / "avatar_shape.xml"
+            # Neck scaled down to 0.75 in X and 0.80 in Y
+            shape_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
+<linden_genepool version="1.0">
+    <archetype name="Test">
+        <bone name="mNeck" position="-0.01 0.0 0.251" scale="0.75 0.80 1.0"/>
+        <bone name="mFaceJaw" position="0.0 0.0 0.0" scale="1.0 1.0 1.0"/>
+    </archetype>
+</linden_genepool>""")
+
+            count = apply_exact_sl_shape_to_meshes(
+                meshes=[obj],
+                folder_path=folder,
+                shape_xml_path=shape_file,
+                delta_neck=0.0,
+            )
+            self.assertEqual(count, 1)
+            sk = mesh.shape_keys.key_blocks["SL_Avatar_Shape"]
+            # Verify that X and Y span of mNeck vertices has shrunk by exactly 0.75
+            neck_verts_orig = [mesh.vertices[i] for i in range(len(mesh.vertices) - 1)]
+            neck_verts_sk = [sk.data[i] for i in range(len(mesh.vertices) - 1)]
+            orig_dx = max(v.co.x for v in neck_verts_orig) - min(v.co.x for v in neck_verts_orig)
+            shaped_dx = max(v.co.x for v in neck_verts_sk) - min(v.co.x for v in neck_verts_sk)
+            self.assertAlmostEqual(shaped_dx / orig_dx, 0.75, places=2)
+
+        bpy.data.objects.remove(obj, do_unlink=True)
+        bpy.data.meshes.remove(mesh, do_unlink=True)
+
 
 if __name__ == "__main__":
     unittest.main()
+

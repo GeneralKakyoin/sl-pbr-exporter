@@ -117,10 +117,35 @@ SL_SKELETON_HIERARCHY: Dict[str, Tuple[Optional[str], Tuple[float, float, float]
     'mToeLeft': ('mFootLeft', (0.163, -0.006, 0.007)),
 }
 
-FACIAL_BONE_NAMES = {
+# Bones that define actual Bento facial features and expressions (eyes, nose, mouth, ears, brows, jaw)
+# Excludes armature hierarchy joints like 'mFaceRoot', 'mHead', 'mSkull' which hair and hats are rigged to.
+BENTO_FACIAL_FEATURE_BONES = {
     k for k in SL_SKELETON_HIERARCHY
-    if k.startswith('mFace') or k in ('mHead', 'mSkull', 'mEyeLeft', 'mEyeRight')
+    if (k.startswith('mFace') and k != 'mFaceRoot') or k in ('mEyeLeft', 'mEyeRight')
 }
+
+# Bones that belong strictly to the body torso and limbs.
+# Any mesh weighted to these bones is clothing, body mesh, or body attachment, and must NEVER
+# be treated as a facial mesh.
+BODY_TORSO_BONES = {
+    'mChest', 'CHEST', 'UPPER_BACK', 'LEFT_PEC', 'RIGHT_PEC',
+    'mSpine1', 'mSpine2', 'mSpine3', 'mSpine4', 'mTorso',
+    'mPelvis', 'PELVIS', 'BUTT', 'BELLY', 'LEFT_HANDLE', 'RIGHT_HANDLE', 'LOWER_BACK',
+    'mHipLeft', 'mHipRight', 'mShoulderLeft', 'mShoulderRight',
+    'mCollarLeft', 'mCollarRight', 'L_CLAVICLE', 'R_CLAVICLE',
+    'mElbowLeft', 'mElbowRight', 'L_UPPER_ARM', 'R_UPPER_ARM',
+    'L_LOWER_ARM', 'R_LOWER_ARM', 'mWristLeft', 'mWristRight',
+    'L_HAND', 'R_HAND', 'mKneeLeft', 'mKneeRight',
+    'L_UPPER_LEG', 'R_UPPER_LEG', 'L_LOWER_LEG', 'R_LOWER_LEG',
+    'mAnkleLeft', 'mAnkleRight', 'L_FOOT', 'R_FOOT',
+    'mFootLeft', 'mFootRight', 'mToeLeft', 'mToeRight'
+}
+
+HEAD_ATTACHMENT_BONES = {'mHead', 'HEAD', 'mSkull', 'mFaceRoot'}
+
+# Backward compatibility alias
+FACIAL_BONE_NAMES = BENTO_FACIAL_FEATURE_BONES
+
 
 
 def parse_shape_xml_bones(shape_xml_path: Path) -> Dict[str, Dict[str, np.ndarray]]:
@@ -341,21 +366,24 @@ def apply_exact_sl_shape_to_meshes(
         vgroups = {g.index: g.name for g in obj.vertex_groups}
         mesh = obj.data
 
-        # Ensure this is a Bento head / facial attachment mesh, NOT a body or clothing piece.
-        # Bodies (Maitreya, eBODY Reborn) and clothes are rigged to the body skeleton and must
-        # not be collapsed towards the mNeck anchor.
+        # Ensure this is a Bento head / facial attachment mesh (head, eyes, ears, lashes, teeth, etc.),
+        # NOT hair, body, or clothing.
+        # A Bento facial mesh MUST have weights for Bento facial feature bones,
+        # and MUST NOT have weights for torso/limb bones.
         has_facial_weight = False
+        has_body_weight = False
         for v in mesh.vertices:
             for g in v.groups:
                 if g.weight > 0.01:
                     bname = vgroups.get(g.group)
-                    if bname in facial_bone_names:
+                    if bname in BENTO_FACIAL_FEATURE_BONES:
                         has_facial_weight = True
-                        break
-            if has_facial_weight:
+                    elif bname in BODY_TORSO_BONES:
+                        has_body_weight = True
+            if has_facial_weight and has_body_weight:
                 break
 
-        if not has_facial_weight:
+        if not has_facial_weight or has_body_weight:
             if mesh.shape_keys:
                 sk = mesh.shape_keys.key_blocks.get(shape_key_name)
                 if sk:
@@ -414,8 +442,14 @@ def apply_exact_sl_shape_to_meshes(
                     w = g.weight
                     if w > 1e-4:
                         if jname == anchor_bone:
-                            # Anchor joint (mNeck seam): follows neck seam offset
-                            p_j = p_sl + delta_sl
+                            # Anchor joint (mNeck seam): scale horizontally by s_eff around bone center
+                            # to match shaped body neck circumference, and translate vertically by delta_sl
+                            p_bind = bind_world_pos.get(anchor_bone, np.array([-0.0249, 0.0, 1.6071], dtype=np.float32))
+                            s_eff = eff_scales.get(anchor_bone, np.ones(3, dtype=np.float32))
+                            p_j = np.zeros(3, dtype=np.float32)
+                            p_j[0] = p_bind[0] + s_eff[0] * (p_sl[0] - p_bind[0])
+                            p_j[1] = p_bind[1] + s_eff[1] * (p_sl[1] - p_bind[1])
+                            p_j[2] = p_sl[2] + delta_sl[2]
                         else:
                             p_bind = bind_world_pos.get(jname, p_sl)
                             p_shaped = shaped_world_pos.get(jname, p_bind)

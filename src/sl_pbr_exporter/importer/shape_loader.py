@@ -66,7 +66,13 @@ def parse_shape_xml(shape_xml_path: Path) -> Dict[str, Any]:
     }
 
 
-from .sl_shape_engine import apply_exact_sl_shape_to_meshes, FACIAL_BONE_NAMES
+from .sl_shape_engine import (
+    apply_exact_sl_shape_to_meshes,
+    FACIAL_BONE_NAMES,
+    BENTO_FACIAL_FEATURE_BONES,
+    BODY_TORSO_BONES,
+    HEAD_ATTACHMENT_BONES,
+)
 
 
 def apply_shape_xml(
@@ -90,19 +96,13 @@ def apply_shape_xml(
 
     if devkit_arm and hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
         try:
-            # Find body mesh to measure neck seam displacement
+            # Find body mesh to protect attached meshes
             body_mesh = bpy.context.scene.objects.get("RebornBody")
             if not body_mesh:
                 for o in bpy.context.scene.objects:
                     if o.type == "MESH" and "body" in o.name.lower() and o.data and len(o.data.vertices) > 0:
                         body_mesh = o
                         break
-
-            unshaped_neck_z = None
-            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
-                neck_candidates = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
-                if neck_candidates:
-                    unshaped_neck_z = max(neck_candidates)
 
             # Protect attached meshes from Avastar's slider vertex mutation and parenting displacement
             protected_modifiers = []
@@ -129,6 +129,7 @@ def apply_shape_xml(
             devkit_arm.select_set(True)
             bpy.context.view_layer.objects.active = devkit_arm
             bpy.ops.avastar.import_shape(filepath=str(shape_xml_path))
+            bpy.context.view_layer.update()
             success = True
 
             # Restore protected modifiers
@@ -140,15 +141,12 @@ def apply_shape_xml(
                 obj.parent = devkit_arm
                 obj.matrix_world = mw
 
-            # Measure shaped neck height to determine delta_neck_z
-            if body_mesh and unshaped_neck_z is not None:
-                neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
-                if neck_candidates_after:
-                    shaped_neck_z = max(neck_candidates_after)
-                    delta_neck_z = shaped_neck_z - unshaped_neck_z
+            # Measure neck vertical offset deterministically from mNeck bone head
+            # 1.607073 is Second Life reference Bento height for mNeck
+            if devkit_arm.data and "mNeck" in devkit_arm.data.bones:
+                delta_neck_z = devkit_arm.data.bones["mNeck"].head_local.z - 1.607073
             elif "mNeck" in devkit_arm.pose.bones:
-                # Fallback to mNeck pose bone displacement if no body mesh (default unshaped mNeck Z is 1.60707)
-                delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.60707
+                delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.607073
         except Exception as e:
             print(f"[ShapeLoader] Avastar import_shape warning: {e}")
 
@@ -163,16 +161,28 @@ def apply_shape_xml(
     if deformed_count > 0:
         success = True
 
-    # 3. Shift hair / head attachments (meshes weighted to mHead with no facial bone weights)
+    # 3. Shift hair / head attachments to track neck height
     if abs(delta_neck_z) > 1e-5:
         import mathutils
         for obj in target_meshes:
             if obj.type != "MESH" or not obj.data or not obj.vertex_groups:
                 continue
             vnames = {g.index: g.name for g in obj.vertex_groups}
-            has_head = any(vnames.get(g.group) in ("mHead", "HEAD") for v in obj.data.vertices for g in v.groups if g.weight > 0.05)
-            has_facial = any(vnames.get(g.group) in FACIAL_BONE_NAMES for v in obj.data.vertices for g in v.groups if g.weight > 0.05)
-            if has_head and not has_facial:
+            has_head = any(
+                vnames.get(g.group) in HEAD_ATTACHMENT_BONES
+                for v in obj.data.vertices for g in v.groups if g.weight > 0.05
+            )
+            has_facial = any(
+                vnames.get(g.group) in BENTO_FACIAL_FEATURE_BONES
+                for v in obj.data.vertices for g in v.groups if g.weight > 0.05
+            )
+            has_body = any(
+                vnames.get(g.group) in BODY_TORSO_BONES
+                for v in obj.data.vertices for g in v.groups if g.weight > 0.05
+            )
+            is_facial_mesh = has_facial and not has_body
+
+            if has_head and not is_facial_mesh:
                 curr_delta = obj.get("sl_neck_delta_applied", 0.0)
                 delta_to_apply = delta_neck_z - curr_delta
                 if abs(delta_to_apply) > 1e-5:

@@ -26,7 +26,13 @@ from ..importer.devkit_binder import (
 )
 from ..importer.mesh_resolver import scan_directory_items
 from ..importer.shape_loader import apply_shape_xml, find_shape_xml, parse_shape_xml
-from ..importer.sl_shape_engine import apply_exact_sl_shape_to_meshes, FACIAL_BONE_NAMES
+from ..importer.sl_shape_engine import (
+    apply_exact_sl_shape_to_meshes,
+    FACIAL_BONE_NAMES,
+    BENTO_FACIAL_FEATURE_BONES,
+    BODY_TORSO_BONES,
+    HEAD_ATTACHMENT_BONES,
+)
 
 
 
@@ -199,27 +205,21 @@ class SL_OT_LoadSelectedItems(Operator):
                         body_mesh = o
                         break
 
-            unshaped_neck_z = None
-            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
-                neck_candidates = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
-                if neck_candidates:
-                    unshaped_neck_z = max(neck_candidates)
-
             try:
                 ensure_object_mode()
                 deselect_all_objects()
                 devkit_arm.select_set(True)
                 context.view_layer.objects.active = devkit_arm
                 bpy.ops.avastar.import_shape(filepath=str(shape_path))
+                context.view_layer.update()
                 self.report({"INFO"}, f"Applied DevKit body shape: {shape_path.name}")
 
-                if body_mesh and unshaped_neck_z is not None:
-                    neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
-                    if neck_candidates_after:
-                        shaped_neck_z = max(neck_candidates_after)
-                        delta_neck_z = shaped_neck_z - unshaped_neck_z
+                # Measure neck vertical offset deterministically from mNeck bone head
+                # 1.607073 is Second Life reference Bento height for mNeck
+                if devkit_arm.data and "mNeck" in devkit_arm.data.bones:
+                    delta_neck_z = devkit_arm.data.bones["mNeck"].head_local.z - 1.607073
                 elif "mNeck" in devkit_arm.pose.bones:
-                    delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.60707
+                    delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.607073
             except Exception as e:
                 self.report({"WARNING"}, f"DevKit body shape application warning: {e}")
 
@@ -260,9 +260,21 @@ class SL_OT_LoadSelectedItems(Operator):
                     if obj.type != "MESH" or not obj.data or not obj.vertex_groups:
                         continue
                     vnames = {g.index: g.name for g in obj.vertex_groups}
-                    has_head = any(vnames.get(g.group) in ("mHead", "HEAD") for v in obj.data.vertices for g in v.groups if g.weight > 0.05)
-                    has_facial = any(vnames.get(g.group) in FACIAL_BONE_NAMES for v in obj.data.vertices for g in v.groups if g.weight > 0.05)
-                    if has_head and not has_facial:
+                    has_head = any(
+                        vnames.get(g.group) in HEAD_ATTACHMENT_BONES
+                        for v in obj.data.vertices for g in v.groups if g.weight > 0.05
+                    )
+                    has_facial = any(
+                        vnames.get(g.group) in BENTO_FACIAL_FEATURE_BONES
+                        for v in obj.data.vertices for g in v.groups if g.weight > 0.05
+                    )
+                    has_body = any(
+                        vnames.get(g.group) in BODY_TORSO_BONES
+                        for v in obj.data.vertices for g in v.groups if g.weight > 0.05
+                    )
+                    is_facial_mesh = has_facial and not has_body
+
+                    if has_head and not is_facial_mesh:
                         curr_delta = obj.get("sl_neck_delta_applied", 0.0)
                         delta_to_apply = delta_neck_z - curr_delta
                         if abs(delta_to_apply) > 1e-5:
