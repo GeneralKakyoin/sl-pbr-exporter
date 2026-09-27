@@ -6,6 +6,7 @@ import re
 from typing import List, Optional, Tuple
 import bpy
 import mathutils
+import numpy as np
 
 from ..config import (
     COLORSPACE_NON_COLOR,
@@ -46,96 +47,98 @@ def get_devkit_armature(scene: Optional[bpy.types.Scene] = None) -> Optional[bpy
     return None
 
 
+# The 7 anatomical body chains in the Second Life skeleton:
+# Pelvis, Torso/Spine, Chest, Left Arm, Right Arm, Left Leg, Right Leg
+ANATOMICAL_BODY_CHAINS = (
+    ("pelvis", {"mPelvis", "PELVIS", "BUTT", "mGroin", "BELLY"}),
+    ("torso", {"mTorso", "mSpine1", "mSpine2", "mSpine3", "mSpine4"}),
+    ("chest", {"mChest", "CHEST", "UPPER_BACK", "LEFT_PEC", "RIGHT_PEC"}),
+    ("left_arm", {"mCollarLeft", "mShoulderLeft", "mElbowLeft", "mWristLeft", "L_CLAVICLE", "L_UPPER_ARM", "L_LOWER_ARM", "L_HAND"}),
+    ("right_arm", {"mCollarRight", "mShoulderRight", "mElbowRight", "mWristRight", "R_CLAVICLE", "R_UPPER_ARM", "R_LOWER_ARM", "R_HAND"}),
+    ("left_leg", {"mHipLeft", "mKneeLeft", "mAnkleLeft", "mFootLeft", "L_UPPER_LEG", "L_LOWER_LEG", "L_FOOT"}),
+    ("right_leg", {"mHipRight", "mKneeRight", "mAnkleRight", "mFootRight", "R_UPPER_LEG", "R_LOWER_LEG", "R_FOOT"}),
+)
+
+EXTREMITIES_BONES = {
+    "mNeck", "NECK", "mWristLeft", "mWristRight", "L_HAND", "R_HAND",
+    "mAnkleLeft", "mAnkleRight", "mFootLeft", "mFootRight", "mToeLeft", "mToeRight", "L_FOOT", "R_FOOT"
+}
+
+
 def find_body_mesh(
     scene: Optional[bpy.types.Scene] = None,
     candidates: Optional[List[bpy.types.Object]] = None,
 ) -> Optional[bpy.types.Object]:
-    """Universally locate the primary avatar body mesh across all body brands and devkits.
+    """Locate the primary avatar body mesh purely via Second Life skeleton topology and 3D bounds.
 
-    Evaluates bone coverage across standard Second Life body deformation bones (BODY_TORSO_BONES),
-    excluding facial-only meshes and hair/attachments, and weighting regional distribution.
-    Supports Reborn, Maitreya Lara/LaraX, Legacy, Kupra, Belleza Gen.X/Jake, Inithium,
-    Slink, Erika, Prima, StarMesh, generic 'Body', and unbranded body meshes.
+    100% name-agnostic and brand-agnostic: evaluates bone weight coverage across the 7
+    anatomical chains of the Linden/Bento skeleton, extremities coverage (neck, wrists, ankles),
+    vertical height span (Delta Z), and vertex count. Zero name keywords.
     """
     sc = scene or bpy.context.scene
     pool = candidates if candidates is not None else [o for o in sc.objects if o.type == "MESH"]
 
-    scored_candidates = []
+    # Collect rig widget custom shapes to ignore
+    rig_widgets = {
+        pb.custom_shape
+        for obj in sc.objects
+        if obj.type == "ARMATURE" and obj.pose
+        for pb in obj.pose.bones
+        if pb.custom_shape
+    }
 
-    body_keywords = (
-        "body", "reborn", "maitreya", "lara", "legacy", "kupra",
-        "belleza", "gen.x", "genx", "inithium", "slink", "erika",
-        "physique", "hourglass", "kario", "prima", "starmesh", "female", "male"
-    )
-    clothing_keywords = (
-        "dress", "skirt", "pants", "shirt", "top", "jacket", "coat",
-        "shoe", "boot", "hair", "glove", "hat", "corset", "suit",
-        "bra", "panty", "lingerie", "outfit", "earring", "necklace", "collar"
-    )
-    helper_keywords = (
-        "customshape", "wgt_", "cs_", "helper", "widget", "bone_shape", "rig_shape"
-    )
+    scored_candidates = []
 
     for obj in pool:
         if not obj or obj.type != "MESH" or not obj.data:
             continue
+        if obj in rig_widgets:
+            continue
         v_count = len(obj.data.vertices)
-        if v_count < 3:
+        if v_count < 30:  # Collision hulls / dummy bounding boxes
             continue
-
-        name_lower = obj.name.lower()
-        if any(h in name_lower for h in helper_keywords):
-            continue
-
         if not obj.vertex_groups:
             continue
 
-        vnames = {g.index: g.name for g in obj.vertex_groups}
-        vnames_set = set(vnames.values())
+        vnames_set = {g.name for g in obj.vertex_groups}
 
-        # Check presence of body bones
+        # Must be bound to at least one Second Life body deformation bone
         body_bones_present = vnames_set.intersection(BODY_TORSO_BONES)
         if not body_bones_present:
             continue
 
-        # Check facial feature bones: if mesh has many facial bones and few body bones, it's a head/collar
+        # Bento facial filter: if predominantly facial bones with minimal body bones, it is a head
         facial_bones_present = vnames_set.intersection(BENTO_FACIAL_FEATURE_BONES)
-        if len(facial_bones_present) > 10 and len(body_bones_present) < 5:
+        if len(facial_bones_present) > 10 and len(body_bones_present) < 3:
             continue
 
-        score = 0
+        # 1. Anatomical chain coverage (0 to 7)
+        chains_covered = sum(1 for _, chain_bones in ANATOMICAL_BODY_CHAINS if vnames_set & chain_bones)
 
-        # Keyword matching
-        if any(k in name_lower for k in body_keywords):
-            score += 150
-        if any(k in name_lower for k in clothing_keywords):
-            score -= 100
-        if "+" in obj.name or "_feet_" in name_lower or "_hand_" in name_lower:
-            score -= 30
+        # 2. Extremities coverage (neck, wrists/hands, ankles/feet)
+        extremities_covered = len(vnames_set & EXTREMITIES_BONES)
 
-        # Regional coverage across pelvis, torso, chest, legs, arms
-        has_pelvis = any(b in vnames_set for b in ('mPelvis', 'PELVIS', 'BUTT'))
-        has_torso = any(b in vnames_set for b in ('mTorso', 'mSpine1', 'mSpine2', 'mSpine3', 'mSpine4'))
-        has_chest = any(b in vnames_set for b in ('mChest', 'CHEST', 'UPPER_BACK'))
-        has_legs = any(b in vnames_set for b in ('mHipLeft', 'mHipRight', 'mKneeLeft', 'mKneeRight', 'mAnkleLeft', 'mAnkleRight'))
-        has_arms = any(b in vnames_set for b in ('mShoulderLeft', 'mShoulderRight', 'mElbowLeft', 'mElbowRight', 'mWristLeft', 'mWristRight'))
+        # 3. 3D Bounding Box vertical span (Delta Z)
+        try:
+            z_coords = [v.co.z for v in obj.data.vertices]
+            span_z = max(z_coords) - min(z_coords)
+        except Exception:
+            span_z = 0.0
 
-        regions_covered = sum([has_pelvis, has_torso, has_chest, has_legs, has_arms])
-        score += regions_covered * 35  # Max 175 for full body coverage
-
-        # Vertex count weighting
-        score += min(v_count // 100, 50)
+        # Composite anatomical score:
+        # Full body covers 5-7 chains, reaches extremities, spans > 1.0m height
+        score = (
+            (chains_covered * 200)
+            + (min(extremities_covered, 6) * 40)
+            + int(span_z * 200)
+            + min(v_count // 50, 100)
+        )
 
         scored_candidates.append((score, obj))
 
     if scored_candidates:
         scored_candidates.sort(key=lambda x: x[0], reverse=True)
         return scored_candidates[0][1]
-
-    # Fallback to any mesh with 'body' in name
-    for obj in pool:
-        if obj and obj.type == "MESH" and "body" in obj.name.lower() and obj.data and len(obj.data.vertices) > 0:
-            return obj
 
     return None
 
@@ -205,11 +208,11 @@ def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Objec
 
 
 def setup_devkit_visibility(scene: Optional[bpy.types.Scene] = None) -> None:
-    """Clean up avatar and devkit visibility across all body brands:
+    """Clean up avatar and devkit visibility in a 100% name-agnostic manner:
     - Keep primary body mesh visible.
-    - Hide bone custom shape widgets (pb.custom_shape).
-    - Hide helper meshes and collision hulls (< 30 verts).
-    - Hide alternate body variation meshes (e.g. +Juicy, _Feet_Flat if main body is present).
+    - Hide bone custom shape widgets referenced by pose bones (pb.custom_shape).
+    - Hide collision hulls / dummy bounding boxes (< 30 verts).
+    - Never hide any user-imported mesh based on name strings.
     """
     sc = scene or bpy.context.scene
     body = find_body_mesh(sc)
@@ -217,18 +220,13 @@ def setup_devkit_visibility(scene: Optional[bpy.types.Scene] = None) -> None:
         body.hide_viewport = False
         body.hide_render = False
 
-    # 1. Collect rig widget custom shapes from all armatures
+    # Collect rig widget custom shapes from all armatures directly via RNA object pointer
     rig_widgets = set()
     for obj in sc.objects:
         if obj.type == "ARMATURE" and obj.pose:
             for pb in obj.pose.bones:
                 if pb.custom_shape:
                     rig_widgets.add(pb.custom_shape)
-
-    # 2. Helper prefixes/substrings common across devkits
-    helper_prefixes = ("customshape", "wgt_", "cs_", "helper_", "widget_", "bone_shape", "rig_shape", "collision_hull")
-
-    body_name = body.name if body else None
 
     for obj in sc.objects:
         if obj == body:
@@ -238,24 +236,11 @@ def setup_devkit_visibility(scene: Optional[bpy.types.Scene] = None) -> None:
             obj.hide_render = True
             continue
 
-        name_lower = obj.name.lower()
-        if any(name_lower.startswith(p) for p in helper_prefixes):
-            obj.hide_viewport = True
-            obj.hide_render = True
-            continue
-
-        # Hide collision hulls
+        # Hide collision hulls / dummy boxes (< 30 vertices)
         if obj.type == "MESH" and obj.data and len(obj.data.vertices) < 30:
             obj.hide_viewport = True
             obj.hide_render = True
             continue
-
-        # Hide alternate body variations (e.g. RebornBody+Juicy, Maitreya_Feet_Flat when main body is present)
-        if body_name:
-            if obj.name.startswith(f"{body_name}+") or obj.name.startswith(f"{body_name}_"):
-                obj.hide_viewport = True
-                obj.hide_render = True
-                continue
 
 
 def align_item_to_devkit(mesh_obj: bpy.types.Object) -> None:
@@ -275,23 +260,31 @@ def align_item_to_devkit(mesh_obj: bpy.types.Object) -> None:
     mesh_obj.data.update()
 
 
-def is_skin_material(mat: bpy.types.Material) -> bool:
-    """Determine if a material belongs to an avatar skin surface (body or head)."""
-    if not mat:
+def image_has_transparency(img: bpy.types.Image) -> bool:
+    """Determine if an image texture contains active transparent or semi-transparent pixels.
+
+    100% data-driven: samples pixel alpha channel directly using vectorized NumPy.
+    Zero name matching or string keywords.
+    """
+    if not img or img.channels < 4:
         return False
-    name_lower = mat.name.lower()
-    skin_patterns = (
-        "skin", "head", "face", "torso", "legs", "leg", "arms", "arm", "body",
-        "ears", "ear", "neck", "upper", "lower", "reborn", "maitreya", "lara",
-        "legacy", "kupra", "belleza", "inithium", "slink", "erika", "bom", "bakesonmesh"
-    )
-    if any(p in name_lower for p in skin_patterns):
-        exclude = (
-            "suit", "armor", "jewelry", "earring", "phone", "chain", "cloth",
-            "corset", "dress", "pant", "hair", "shoe", "boot", "glove"
-        )
-        if not any(ex in name_lower for ex in exclude):
-            return True
+    w, h = img.size
+    if w == 0 or h == 0:
+        return False
+    # Dummy 1x1 or low-res placeholder textures (< 32x32)
+    if w <= 32 and h <= 32:
+        return True
+    try:
+        px = np.empty(w * h * 4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        alpha = px[3::4]
+        return bool(np.any(alpha < 0.98))
+    except Exception:
+        return False
+
+
+def is_skin_material(mat: bpy.types.Material) -> bool:
+    """Deprecated keyword stub retained for backward compatibility."""
     return False
 
 
@@ -422,7 +415,6 @@ def wire_material_textures(
 
     # 3. Wire Diffuse / Base Color
     diff_color = m_color or getattr(mat, "diffuse_color", [1.0, 1.0, 1.0, 1.0])
-    is_skin = is_skin_material(mat)
 
     if diff_file and diff_file.exists():
         img = bpy.data.images.load(str(diff_file), check_existing=True)
@@ -446,19 +438,24 @@ def wire_material_textures(
             else:
                 links.new(t_node.outputs["Color"], bc_sock)
 
-        # Alpha wiring
+        # Alpha wiring: data-driven inspection of actual image pixels
+        has_trans = image_has_transparency(img)
         is_dummy = hasattr(img, "size") and img.size[0] <= 32 and img.size[1] <= 32
-        if diff_color[3] == 0.0 or is_dummy:
+
+        if diff_color[3] == 0.0 and (is_dummy or not has_trans):
+            # Inactive/dummy linkset shell: force alpha 0
             if "Alpha" in principled.inputs:
                 principled.inputs["Alpha"].default_value = 0.0
             set_material_blend_method(mat, "HASHED")
-        elif is_skin and diff_color[3] > 0.0:
+        elif not has_trans and diff_color[3] >= 0.95:
+            # Image is 100% opaque across all pixels (skin, opaque clothing, denim, leather)
             if "Alpha" in principled.inputs:
                 principled.inputs["Alpha"].default_value = 1.0
             set_material_blend_method(mat, "OPAQUE")
         else:
+            # Image contains active transparency (hair strands, lashes, lace, tattoos, mesh cutouts)
             if "Alpha" in t_node.outputs and "Alpha" in principled.inputs:
-                if diff_color[3] < 0.96 and diff_color[3] > 0.0:
+                if 0.0 < diff_color[3] < 0.96:
                     math_node = nodes.new("ShaderNodeMath")
                     math_node.operation = "MULTIPLY"
                     math_node.inputs[1].default_value = diff_color[3]
@@ -478,7 +475,7 @@ def wire_material_textures(
             principled.inputs["Alpha"].default_value = 0.0
             set_material_blend_method(mat, "HASHED")
         else:
-            set_material_blend_method(mat, "OPAQUE" if (is_skin and diff_color[3] > 0.0) else "HASHED")
+            set_material_blend_method(mat, "OPAQUE" if diff_color[3] >= 0.95 else "HASHED")
 
     # 4. Wire Normal Map
     if norm_file and norm_file.exists():
@@ -561,8 +558,8 @@ def wire_material_textures(
             links.new(t_spec.outputs["Color"], spec_sock)
         row_y -= 280
 
-    # 7. Wire Emissive (only if non-skin)
-    if emissive_file and emissive_file.exists() and not is_skin:
+    # 7. Wire Emissive
+    if emissive_file and emissive_file.exists():
         em_img = bpy.data.images.load(str(emissive_file), check_existing=True)
         em_img.colorspace_settings.name = COLORSPACE_SRGB
         t_em = nodes.new("ShaderNodeTexImage")

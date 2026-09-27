@@ -321,38 +321,42 @@ class TestImporter(unittest.TestCase):
         bpy.data.armatures.remove(arm_data, do_unlink=True)
 
     def test_universal_body_mesh_detection_maitreya_and_legacy(self):
-        """Verify find_body_mesh correctly identifies Maitreya, Legacy, Kupra, and generic bodies."""
+        """Verify find_body_mesh identifies the body mesh purely by skeleton chains and 3D bounds, completely ignoring names."""
         from sl_pbr_exporter.importer.devkit_binder import find_body_mesh
 
-        # 1. Create a head mesh (facial bones)
-        head_mesh = bpy.data.meshes.new("HeadMeshData")
+        # 1. Create a head mesh with completely generic/arbitrary name (facial feature bones)
+        head_mesh = bpy.data.meshes.new("GenericHeadData")
         head_mesh.from_pydata([(0, 0, 1.7), (0, 0, 1.8), (0, 0, 1.9)], [], [])
-        head_obj = bpy.data.objects.new("HEAD_lel_evox_AVALON", head_mesh)
+        head_obj = bpy.data.objects.new("ArbitraryItem_HeadPart", head_mesh)
         bpy.context.scene.collection.objects.link(head_obj)
         for bname in ("mFaceNoseCenter", "mFaceChin", "mFaceCheekUpperLeft", "mFaceLipLowerCenter"):
             head_obj.vertex_groups.new(name=bname)
 
-        # 2. Create a clothing mesh (partial body coverage)
-        dress_mesh = bpy.data.meshes.new("DressData")
+        # 2. Create a clothing mesh with generic/arbitrary name (only pelvis & torso coverage)
+        dress_mesh = bpy.data.meshes.new("GenericDressData")
         dress_mesh.from_pydata([(0, 0, 1.1), (0, 0, 1.2), (0, 0, 1.3)], [], [])
-        dress_obj = bpy.data.objects.new("Dress_Short", dress_mesh)
+        dress_obj = bpy.data.objects.new("ArbitraryItem_Garment", dress_mesh)
         bpy.context.scene.collection.objects.link(dress_obj)
         for bname in ("mPelvis", "mTorso", "mChest"):
             dress_obj.vertex_groups.new(name=bname)
 
-        # 3. Create Maitreya body mesh (full 5-region body coverage)
-        body_mesh = bpy.data.meshes.new("MaitreyaData")
-        body_verts = [(0, 0, z / 10.0) for z in range(120)]
+        # 3. Create full body mesh with generic/arbitrary name (covering all 7 anatomical chains & spanning 1.4m height)
+        body_mesh = bpy.data.meshes.new("GenericBodyData")
+        body_verts = [(0, 0, 0.1 + (z / 100.0) * 1.5) for z in range(120)]
         body_mesh.from_pydata(body_verts, [], [])
-        body_obj = bpy.data.objects.new("Maitreya Mesh Body - Lara", body_mesh)
+        body_obj = bpy.data.objects.new("ArbitraryItem_HumanoidForm", body_mesh)
         bpy.context.scene.collection.objects.link(body_obj)
-        for bname in ("mPelvis", "mTorso", "mChest", "mHipLeft", "mHipRight", "mShoulderLeft", "mShoulderRight", "mKneeLeft"):
+        for bname in (
+            "mPelvis", "mTorso", "mChest", "mNeck",
+            "mHipLeft", "mHipRight", "mKneeLeft", "mKneeRight", "mAnkleLeft", "mAnkleRight",
+            "mShoulderLeft", "mShoulderRight", "mElbowLeft", "mElbowRight", "mWristLeft", "mWristRight"
+        ):
             body_obj.vertex_groups.new(name=bname)
 
-        # Body finder must identify Maitreya over dress and head
+        # Body finder must identify the humanoid body based purely on skeleton chains and bounds
         found = find_body_mesh(bpy.context.scene)
         self.assertIsNotNone(found)
-        self.assertEqual(found.name, "Maitreya Mesh Body - Lara")
+        self.assertEqual(found.name, "ArbitraryItem_HumanoidForm")
 
         # Cleanup
         for o in (head_obj, dress_obj, body_obj):
@@ -360,74 +364,80 @@ class TestImporter(unittest.TestCase):
         for m in (head_mesh, dress_mesh, body_mesh):
             bpy.data.meshes.remove(m, do_unlink=True)
 
-    def test_universal_skin_material_classification(self):
-        """Verify is_skin_material recognizes skin materials across multiple brands and rejects clothes."""
-        from sl_pbr_exporter.importer.devkit_binder import is_skin_material
+    def test_image_has_transparency_data_driven(self):
+        """Verify image_has_transparency inspects pixel alpha values directly without checking names."""
+        from sl_pbr_exporter.importer.devkit_binder import image_has_transparency
+        import numpy as np
 
-        mat_names_true = [
-            "Skin_Head_1_mat",
-            "Maitreya_Body_mat",
-            "Legacy_Torso_mat",
-            "Kupra_Legs_mat",
-            "Belleza_Skin_mat",
-            "RebornBody_mat",
-            "BOM_Body_mat",
-            "mat_body_upper",
-            "mat_body_lower",
-            "Face_mat",
-            "Ear_mat",
-        ]
-        for name in mat_names_true:
-            mat = bpy.data.materials.new(name)
-            self.assertTrue(is_skin_material(mat), f"Material '{name}' should be recognized as skin")
-            bpy.data.materials.remove(mat)
+        # 1. 100% Opaque Image (all alpha = 1.0)
+        img_opaque = bpy.data.images.new("TestOpaque", width=64, height=64, alpha=True)
+        pixels_opaque = np.ones(64 * 64 * 4, dtype=np.float32)
+        img_opaque.pixels.foreach_set(pixels_opaque)
+        img_opaque.update()
+        self.assertFalse(image_has_transparency(img_opaque))
+        bpy.data.images.remove(img_opaque)
 
-        mat_names_false = [
-            "Latex_Bodysuit_mat",
-            "Silk_Dress_mat",
-            "Leather_Boots_mat",
-            "Corset_Fabric_mat",
-            "Gold_Earring_mat",
-            "Bra_Panty_mat",
-            "Denim_Pants_mat",
-        ]
-        for name in mat_names_false:
-            mat = bpy.data.materials.new(name)
-            self.assertFalse(is_skin_material(mat), f"Material '{name}' should NOT be recognized as skin")
-            bpy.data.materials.remove(mat)
+        # 2. Transparent Image (alpha = 0.0 in some pixels)
+        img_trans = bpy.data.images.new("TestTransparent", width=64, height=64, alpha=True)
+        pixels_trans = np.ones(64 * 64 * 4, dtype=np.float32)
+        pixels_trans[3::4] = 0.0  # Cutout alpha
+        img_trans.pixels.foreach_set(pixels_trans)
+        img_trans.update()
+        self.assertTrue(image_has_transparency(img_trans))
+        bpy.data.images.remove(img_trans)
+
+        # 3. Dummy placeholder image (<= 32x32)
+        img_dummy = bpy.data.images.new("TestDummy", width=16, height=16, alpha=True)
+        self.assertTrue(image_has_transparency(img_dummy))
+        bpy.data.images.remove(img_dummy)
 
     def test_universal_devkit_visibility_cleanup(self):
-        """Verify setup_devkit_visibility keeps main body visible and hides widgets & alternate cuts."""
+        """Verify setup_devkit_visibility keeps main body visible and hides pose bone widgets & collision hulls."""
         from sl_pbr_exporter.importer.devkit_binder import setup_devkit_visibility
 
-        body_m = bpy.data.meshes.new("KupraBodyData")
+        body_m = bpy.data.meshes.new("GenericBodyData")
         body_m.from_pydata([(0, 0, z / 10.0) for z in range(100)], [], [])
-        body_obj = bpy.data.objects.new("[INITHIUM] KUPRA", body_m)
+        body_obj = bpy.data.objects.new("UnbrandedBody", body_m)
         bpy.context.scene.collection.objects.link(body_obj)
         for bname in ("mPelvis", "mTorso", "mChest", "mHipLeft", "mHipRight"):
             body_obj.vertex_groups.new(name=bname)
 
-        alt_m = bpy.data.meshes.new("KupraAltData")
-        alt_m.from_pydata([(0, 0, 0.1), (0, 0, 0.2)], [], [])
-        alt_obj = bpy.data.objects.new("[INITHIUM] KUPRA_Feet_Flat", alt_m)
-        bpy.context.scene.collection.objects.link(alt_obj)
+        # Collision hull (< 30 verts)
+        hull_m = bpy.data.meshes.new("HullData")
+        hull_m.from_pydata([(0, 0, 0.1), (0, 0, 0.2)], [], [])
+        hull_obj = bpy.data.objects.new("UnbrandedHull", hull_m)
+        bpy.context.scene.collection.objects.link(hull_obj)
 
+        # Pose bone custom shape widget
         wgt_m = bpy.data.meshes.new("WgtData")
         wgt_m.from_pydata([(0, 0, 0)], [], [])
-        wgt_obj = bpy.data.objects.new("WGT_mPelvis", wgt_m)
+        wgt_obj = bpy.data.objects.new("ArbitraryWidget", wgt_m)
         bpy.context.scene.collection.objects.link(wgt_obj)
+
+        arm_d = bpy.data.armatures.new("TestArmData")
+        arm_o = bpy.data.objects.new("TestArm", arm_d)
+        bpy.context.scene.collection.objects.link(arm_o)
+        bpy.context.view_layer.objects.active = arm_o
+        bpy.ops.object.mode_set(mode='EDIT')
+        eb = arm_d.edit_bones.new("mPelvis")
+        eb.head = (0, 0, 1.0)
+        eb.tail = (0, 0, 1.1)
+        bpy.ops.object.mode_set(mode='POSE')
+        arm_o.pose.bones["mPelvis"].custom_shape = wgt_obj
+        bpy.ops.object.mode_set(mode='OBJECT')
 
         setup_devkit_visibility(bpy.context.scene)
 
-        self.assertFalse(body_obj.hide_viewport, "Main body must remain visible")
-        self.assertFalse(body_obj.hide_render, "Main body must remain renderable")
-        self.assertTrue(alt_obj.hide_viewport, "Alternate cut variations must be hidden")
-        self.assertTrue(wgt_obj.hide_viewport, "Rig widget objects must be hidden")
+        self.assertFalse(body_obj.hide_viewport)
+        self.assertTrue(hull_obj.hide_viewport)
+        self.assertTrue(wgt_obj.hide_viewport)
 
-        for o in (body_obj, alt_obj, wgt_obj):
+        # Cleanup
+        for o in (body_obj, hull_obj, wgt_obj, arm_o):
             bpy.data.objects.remove(o, do_unlink=True)
-        for m in (body_m, alt_m, wgt_m):
+        for m in (body_m, hull_m, wgt_m):
             bpy.data.meshes.remove(m, do_unlink=True)
+        bpy.data.armatures.remove(arm_d, do_unlink=True)
 
     def test_count_facial_bones_in_dae_prioritization(self):
         """Verify count_facial_bones_in_dae scores Bento face DAE higher than hair or clothes."""
@@ -454,18 +464,19 @@ class TestImporter(unittest.TestCase):
 
     def test_transfer_weights_universal_body(self):
         """Verify SL_OT_TransferWeights transfers weights from any discovered body mesh."""
-        # 1. Create a body mesh named 'Legacy_Body'
+        # 1. Create a body mesh with 50 vertices (valid humanoid mesh, not a collision hull)
         body_m = bpy.data.meshes.new("LegacyBodyData")
-        body_m.from_pydata([(0, 0, 1.0), (0, 0, 1.2), (0, 0, 1.4)], [], [])
+        body_verts = [(0, 0, 0.2 + z * 0.02) for z in range(50)]
+        body_m.from_pydata(body_verts, [], [])
         body_obj = bpy.data.objects.new("Legacy_Body", body_m)
         bpy.context.scene.collection.objects.link(body_obj)
         for bname in ("mPelvis", "mTorso", "mChest", "mHipLeft", "mHipRight"):
             vg = body_obj.vertex_groups.new(name=bname)
-            vg.add([0, 1, 2], 0.8, 'REPLACE')
+            vg.add(list(range(50)), 0.8, 'REPLACE')
 
         # 2. Create item mesh to receive weights
         item_m = bpy.data.meshes.new("SkirtData")
-        item_m.from_pydata([(0, 0, 1.0), (0, 0, 1.1)], [], [])
+        item_m.from_pydata([(0, 0, 1.0), (0, 0, 1.1), (0.1, 0, 1.0), (0.1, 0, 1.1)], [], [])
         item_obj = bpy.data.objects.new("Skirt", item_m)
         bpy.context.scene.collection.objects.link(item_obj)
         bpy.context.view_layer.objects.active = item_obj
