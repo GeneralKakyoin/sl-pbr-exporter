@@ -298,6 +298,22 @@ def compute_shaped_skeleton(
     return eff_scales, shaped_world_pos
 
 
+def count_facial_bones_in_dae(dae_path: Path) -> int:
+    """Count how many Bento facial feature bones are defined in a Collada DAE skin."""
+    if not dae_path.exists():
+        return 0
+    try:
+        with open(dae_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read(512 * 1024)
+            count = sum(1 for bname in BENTO_FACIAL_FEATURE_BONES if bname in content)
+            if count == 0:
+                remaining = f.read()
+                count = sum(1 for bname in BENTO_FACIAL_FEATURE_BONES if bname in remaining)
+            return count
+    except Exception:
+        return 0
+
+
 def apply_exact_sl_shape_to_meshes(
     meshes: List[bpy.types.Object],
     folder_path: Path,
@@ -348,14 +364,19 @@ def apply_exact_sl_shape_to_meshes(
                 delta_sl[:n] = arr[:n]
 
     # Find and parse DAE files for skinning data.
-    # Exclude combined avatar exports and prioritize head DAE to preserve authentic Bento bind matrices.
+    # Exclude combined avatar exports and prioritize genuine Bento facial DAE by bone definitions
+    # to preserve authentic Bento bind matrices across all head brands.
     if not dae_files:
         raw_daes = list(folder_path.glob("*.dae"))
     else:
         raw_daes = list(dae_files)
 
     clean_daes = [p for p in raw_daes if "_combined" not in p.name.lower() and "_sl" not in p.name.lower()]
-    clean_daes.sort(key=lambda p: (0 if "head" in p.name.lower() else 1, p.name))
+    clean_daes.sort(key=lambda p: (
+        -count_facial_bones_in_dae(p),
+        0 if any(k in p.name.lower() for k in ("head", "face")) else 1,
+        p.name,
+    ))
 
     dae_skin_info = parse_dae_skin_info(clean_daes)
     bind_world_pos = dae_skin_info.get('bind_world_pos', {})
@@ -450,13 +471,22 @@ def apply_exact_sl_shape_to_meshes(
                 if jname and jname in eff_scales:
                     w = g.weight
                     if w > 1e-4:
+                        default_pos = np.array([-0.024875, 0.0, 1.607073], dtype=np.float32) if jname == anchor_bone else p_sl
+                        p_bind = bind_world_pos.get(jname, default_pos)
+                        p_shaped = shaped_world_pos.get(jname, p_bind)
+                        s_eff = eff_scales.get(jname, np.ones(3, dtype=np.float32))
+
                         if jname == anchor_bone:
-                            # Anchor joint (mNeck seam): follows neck seam vertical offset without horizontal distortion
-                            p_j = p_sl + delta_sl
+                            # Anchor joint (mNeck seam): scale horizontally (X, Y) by s_eff to track
+                            # the body's neck thickness slider, while keeping Z locked to the neck seam offset
+                            dx = p_sl[0] - p_bind[0]
+                            dy = p_sl[1] - p_bind[1]
+                            p_j = np.array([
+                                p_bind[0] + s_eff[0] * dx,
+                                p_bind[1] + s_eff[1] * dy,
+                                p_sl[2] + delta_sl[2]
+                            ], dtype=np.float32)
                         else:
-                            p_bind = bind_world_pos.get(jname, p_sl)
-                            p_shaped = shaped_world_pos.get(jname, p_bind)
-                            s_eff = eff_scales[jname]
                             p_j = p_shaped + s_eff * (p_sl - p_bind)
 
                         p_def_sl += w * p_j
@@ -546,6 +576,62 @@ def is_rigged_hair_or_attachment(obj: bpy.types.Object) -> bool:
             return False
 
     return has_head_weight and not has_bento_facial_weight
+
+
+def should_shield_from_avastar(obj: bpy.types.Object) -> bool:
+    """
+    Determines if a mesh should be shielded (temporarily unparented and modifier detached)
+    from Avastar's import_shape pass.
+
+    Shielded:
+    - Bento facial feature meshes (head, ears, eyes, lashes, teeth, tongue): deformed with
+      custom inverse bind matrices exclusively by the 1:1 SL Bento Face Engine.
+    - Rigged hair and head attachments: deformed via exact SL bone scale and forward kinematics.
+    - Unrigged objects (0 vertex groups): static meshes that must not be deformed or displaced.
+
+    NOT Shielded (Avastar shaped):
+    - Rigged body clothing / outfit items (catsuits, corsets, belts, garters, gloves/mittens,
+      boots, shoes, collars, chokers): these are rigged to body deformation and collision volume
+      bones and must be morphed by Avastar's shape pass to fit the avatar's body shape contours.
+    """
+    if not obj or obj.type != 'MESH' or not obj.data:
+        return False
+    if not obj.vertex_groups:
+        return True  # Unrigged meshes: shield so edit bone shifts don't displace them
+
+    # 1. Rigged hair and head attachments (e.g. hair with chest/back contact)
+    if is_rigged_hair_or_attachment(obj):
+        return True
+
+    vgroups = {g.index: g.name for g in obj.vertex_groups}
+
+    # 2. Outfit / clothing / collar items:
+    # Any mesh weighted to body torso/limb bones (chest, upper back, clavicles, spine, pelvis, limbs)
+    # is a body outfit item and MUST NOT be shielded from Avastar, even if it has incidental weights
+    # on Bento facial bones (e.g. collars/chokers weighted slightly to mFaceJaw to follow jaw movement).
+    has_body_torso = False
+    has_bento_facial = False
+    for v in obj.data.vertices:
+        for g in v.groups:
+            if g.weight > 0.01:
+                bname = vgroups.get(g.group)
+                if bname in BODY_TORSO_BONES:
+                    has_body_torso = True
+                    break
+                elif bname in BENTO_FACIAL_FEATURE_BONES:
+                    has_bento_facial = True
+        if has_body_torso:
+            break
+
+    if has_body_torso:
+        return False
+
+    # 3. Bento facial feature meshes (head, ears, eyes, lashes, teeth, tongue):
+    # Must have Bento facial feature weights and no body torso/limb weights.
+    if has_bento_facial:
+        return True
+
+    return False
 
 
 def apply_exact_sl_shape_to_rigged_hair(

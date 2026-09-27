@@ -320,6 +320,171 @@ class TestImporter(unittest.TestCase):
         bpy.data.objects.remove(arm_obj, do_unlink=True)
         bpy.data.armatures.remove(arm_data, do_unlink=True)
 
+    def test_universal_body_mesh_detection_maitreya_and_legacy(self):
+        """Verify find_body_mesh correctly identifies Maitreya, Legacy, Kupra, and generic bodies."""
+        from sl_pbr_exporter.importer.devkit_binder import find_body_mesh
+
+        # 1. Create a head mesh (facial bones)
+        head_mesh = bpy.data.meshes.new("HeadMeshData")
+        head_mesh.from_pydata([(0, 0, 1.7), (0, 0, 1.8), (0, 0, 1.9)], [], [])
+        head_obj = bpy.data.objects.new("HEAD_lel_evox_AVALON", head_mesh)
+        bpy.context.scene.collection.objects.link(head_obj)
+        for bname in ("mFaceNoseCenter", "mFaceChin", "mFaceCheekUpperLeft", "mFaceLipLowerCenter"):
+            head_obj.vertex_groups.new(name=bname)
+
+        # 2. Create a clothing mesh (partial body coverage)
+        dress_mesh = bpy.data.meshes.new("DressData")
+        dress_mesh.from_pydata([(0, 0, 1.1), (0, 0, 1.2), (0, 0, 1.3)], [], [])
+        dress_obj = bpy.data.objects.new("Dress_Short", dress_mesh)
+        bpy.context.scene.collection.objects.link(dress_obj)
+        for bname in ("mPelvis", "mTorso", "mChest"):
+            dress_obj.vertex_groups.new(name=bname)
+
+        # 3. Create Maitreya body mesh (full 5-region body coverage)
+        body_mesh = bpy.data.meshes.new("MaitreyaData")
+        body_verts = [(0, 0, z / 10.0) for z in range(120)]
+        body_mesh.from_pydata(body_verts, [], [])
+        body_obj = bpy.data.objects.new("Maitreya Mesh Body - Lara", body_mesh)
+        bpy.context.scene.collection.objects.link(body_obj)
+        for bname in ("mPelvis", "mTorso", "mChest", "mHipLeft", "mHipRight", "mShoulderLeft", "mShoulderRight", "mKneeLeft"):
+            body_obj.vertex_groups.new(name=bname)
+
+        # Body finder must identify Maitreya over dress and head
+        found = find_body_mesh(bpy.context.scene)
+        self.assertIsNotNone(found)
+        self.assertEqual(found.name, "Maitreya Mesh Body - Lara")
+
+        # Cleanup
+        for o in (head_obj, dress_obj, body_obj):
+            bpy.data.objects.remove(o, do_unlink=True)
+        for m in (head_mesh, dress_mesh, body_mesh):
+            bpy.data.meshes.remove(m, do_unlink=True)
+
+    def test_universal_skin_material_classification(self):
+        """Verify is_skin_material recognizes skin materials across multiple brands and rejects clothes."""
+        from sl_pbr_exporter.importer.devkit_binder import is_skin_material
+
+        mat_names_true = [
+            "Skin_Head_1_mat",
+            "Maitreya_Body_mat",
+            "Legacy_Torso_mat",
+            "Kupra_Legs_mat",
+            "Belleza_Skin_mat",
+            "RebornBody_mat",
+            "BOM_Body_mat",
+            "mat_body_upper",
+            "mat_body_lower",
+            "Face_mat",
+            "Ear_mat",
+        ]
+        for name in mat_names_true:
+            mat = bpy.data.materials.new(name)
+            self.assertTrue(is_skin_material(mat), f"Material '{name}' should be recognized as skin")
+            bpy.data.materials.remove(mat)
+
+        mat_names_false = [
+            "Latex_Bodysuit_mat",
+            "Silk_Dress_mat",
+            "Leather_Boots_mat",
+            "Corset_Fabric_mat",
+            "Gold_Earring_mat",
+            "Bra_Panty_mat",
+            "Denim_Pants_mat",
+        ]
+        for name in mat_names_false:
+            mat = bpy.data.materials.new(name)
+            self.assertFalse(is_skin_material(mat), f"Material '{name}' should NOT be recognized as skin")
+            bpy.data.materials.remove(mat)
+
+    def test_universal_devkit_visibility_cleanup(self):
+        """Verify setup_devkit_visibility keeps main body visible and hides widgets & alternate cuts."""
+        from sl_pbr_exporter.importer.devkit_binder import setup_devkit_visibility
+
+        body_m = bpy.data.meshes.new("KupraBodyData")
+        body_m.from_pydata([(0, 0, z / 10.0) for z in range(100)], [], [])
+        body_obj = bpy.data.objects.new("[INITHIUM] KUPRA", body_m)
+        bpy.context.scene.collection.objects.link(body_obj)
+        for bname in ("mPelvis", "mTorso", "mChest", "mHipLeft", "mHipRight"):
+            body_obj.vertex_groups.new(name=bname)
+
+        alt_m = bpy.data.meshes.new("KupraAltData")
+        alt_m.from_pydata([(0, 0, 0.1), (0, 0, 0.2)], [], [])
+        alt_obj = bpy.data.objects.new("[INITHIUM] KUPRA_Feet_Flat", alt_m)
+        bpy.context.scene.collection.objects.link(alt_obj)
+
+        wgt_m = bpy.data.meshes.new("WgtData")
+        wgt_m.from_pydata([(0, 0, 0)], [], [])
+        wgt_obj = bpy.data.objects.new("WGT_mPelvis", wgt_m)
+        bpy.context.scene.collection.objects.link(wgt_obj)
+
+        setup_devkit_visibility(bpy.context.scene)
+
+        self.assertFalse(body_obj.hide_viewport, "Main body must remain visible")
+        self.assertFalse(body_obj.hide_render, "Main body must remain renderable")
+        self.assertTrue(alt_obj.hide_viewport, "Alternate cut variations must be hidden")
+        self.assertTrue(wgt_obj.hide_viewport, "Rig widget objects must be hidden")
+
+        for o in (body_obj, alt_obj, wgt_obj):
+            bpy.data.objects.remove(o, do_unlink=True)
+        for m in (body_m, alt_m, wgt_m):
+            bpy.data.meshes.remove(m, do_unlink=True)
+
+    def test_count_facial_bones_in_dae_prioritization(self):
+        """Verify count_facial_bones_in_dae scores Bento face DAE higher than hair or clothes."""
+        from sl_pbr_exporter.importer.sl_shape_engine import count_facial_bones_in_dae
+
+        with tempfile.TemporaryDirectory() as td:
+            p_dir = Path(td)
+            head_dae = p_dir / "CustomFace.dae"
+            head_dae.write_text("""<skin><source id="j"><Name_array>
+                mPelvis mNeck mHead mFaceRoot mFaceNoseCenter mFaceChin mFaceLipLowerCenter mFaceEyebrowCenterLeft mEyeLeft mEyeRight
+            </Name_array></source></skin>""", encoding="utf-8")
+
+            hair_dae = p_dir / "Hair.dae"
+            hair_dae.write_text("""<skin><source id="j"><Name_array>
+                mHead mSkull mNeck mFaceRoot
+            </Name_array></source></skin>""", encoding="utf-8")
+
+            head_score = count_facial_bones_in_dae(head_dae)
+            hair_score = count_facial_bones_in_dae(hair_dae)
+
+            self.assertGreater(head_score, 0)
+            self.assertEqual(hair_score, 0)
+            self.assertGreater(head_score, hair_score)
+
+    def test_transfer_weights_universal_body(self):
+        """Verify SL_OT_TransferWeights transfers weights from any discovered body mesh."""
+        # 1. Create a body mesh named 'Legacy_Body'
+        body_m = bpy.data.meshes.new("LegacyBodyData")
+        body_m.from_pydata([(0, 0, 1.0), (0, 0, 1.2), (0, 0, 1.4)], [], [])
+        body_obj = bpy.data.objects.new("Legacy_Body", body_m)
+        bpy.context.scene.collection.objects.link(body_obj)
+        for bname in ("mPelvis", "mTorso", "mChest", "mHipLeft", "mHipRight"):
+            vg = body_obj.vertex_groups.new(name=bname)
+            vg.add([0, 1, 2], 0.8, 'REPLACE')
+
+        # 2. Create item mesh to receive weights
+        item_m = bpy.data.meshes.new("SkirtData")
+        item_m.from_pydata([(0, 0, 1.0), (0, 0, 1.1)], [], [])
+        item_obj = bpy.data.objects.new("Skirt", item_m)
+        bpy.context.scene.collection.objects.link(item_obj)
+        bpy.context.view_layer.objects.active = item_obj
+        item_obj.select_set(True)
+
+        # Execute weight transfer operator
+        res = bpy.ops.sl_suite.transfer_weights()
+        self.assertEqual(res, {"FINISHED"})
+
+        # Verify vertex groups transferred to item_obj
+        transferred_groups = [g.name for g in item_obj.vertex_groups]
+        self.assertIn("mPelvis", transferred_groups)
+        self.assertIn("mTorso", transferred_groups)
+
+        for o in (body_obj, item_obj):
+            bpy.data.objects.remove(o, do_unlink=True)
+        for m in (body_m, item_m):
+            bpy.data.meshes.remove(m, do_unlink=True)
+
 
 if __name__ == "__main__":
     unittest.main()

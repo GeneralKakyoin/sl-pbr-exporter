@@ -10,10 +10,15 @@ Built with first-class dual compatibility for **Blender 3.6 LTS** (classic add-o
 
 ### 1. Mesh & DevKit Importer (`Mesh & DevKit` Mode)
 - **Batch Outfit Loading**: Automatically scans outfit folders and displays an interactive checklist to import multiple pieces at once (with **Select All / Deselect All**).
+- **Hybrid Avatar & Item Shaping Architecture**:
+  - Automatically classifies all scene meshes (Bento face, rigged hair, unrigged items, and rigged clothing).
+  - Shields custom Bento heads and rigged hair while driving body clothing through Avastar's slider deformation pass.
+  - Deforms Bento facial meshes using exact 1:1 Linden GenePool math with inverse bind matrix compensation and neck anchoring.
+  - Applies forward kinematics and bone scaling to rigged hair via non-destructive shape keys.
 - **Avastar DevKit Auto-Detection & Appending**:
   - Automatically rebinds imported items to any Avastar `Avatar` armature in the scene.
   - If no DevKit exists in the scene, automatically **appends** the DevKit armature and body mesh from your configured DevKit `.blend` file (stored in `Documents/SecondLife/Kits/`).
-- **Second Life Shape XML Integration**: Detects and applies `*_shape.xml` files directly via Avastar (`bpy.ops.avastar.import_shape()`) to match avatar body slider proportions.
+- **Second Life Shape XML Integration**: Detects and applies `*_shape.xml` files directly, deforming both the avatar body and clothing pieces simultaneously.
 - **Coordinate Space Alignment**: Instantly rotates Second Life coordinate space (+X forward) by -90° around Z to align with Blender/Avastar space (-Y forward).
 - **Weight Transfer**: One-click Data Transfer modifier projection from the body mesh to the active item, with vertex weights automatically clamped to **max 4 weights per vertex** (Second Life hard limit) and normalized.
 - **Second Life Collada (.dae) Export**: Direct export with Avastar presets ready for in-world upload.
@@ -27,6 +32,73 @@ Built with first-class dual compatibility for **Blender 3.6 LTS** (classic add-o
 
 ---
 
+## Hybrid Avatar & Item Shaping Architecture
+
+Second Life avatars combine disparate mesh technologies: mesh bodies (e.g., eBODY Reborn, Kupra), Bento facial meshes with baked Collada bind matrices (LeLutka EvoX, Genus), rigged hair, rigged clothing items (catsuits, corsets, boots, gloves), and unrigged static accessories.
+
+Standard Avastar slider deformation (`avastar.import_shape`) modifies edit bones in rest pose and mutates vertex positions directly. However:
+1. **Bento heads** with non-identity bind scales ($S_{\text{bind}} \neq 1.0$) undergo double-deformation and skull crushing under Avastar.
+2. **Clothing items** imported *after* the shape pass remain at factory zero-slider dimensions because the armature modifier sees no pose displacement at rest.
+3. **Rigged hair** can suffer vertical displacement hacks or unweighted distortion.
+4. **Unrigged meshes** must never receive shape deformation.
+
+The add-on implements an automated **Hybrid Multi-Pass Pipeline**:
+
+```
+[Import Selected Items (.dae)]
+             │
+             ▼
+[Bind Items to DevKit Armature]
+             │
+             ▼
+[Classify Meshes via should_shield_from_avastar()]
+    │                                         │
+    ├─────────────────────────────┐           │
+    ▼                             ▼           ▼
+[Shielded: Bento Face]    [Shielded: Hair] [Rigged Clothing & Body]
+(Detach parent & mod)     (Detach mod)      (Attached to rig)
+                                              │
+                                              ▼
+                                   [Avastar Shape Pass]
+                                   - Shapes rest bones
+                                   - Morphs body mesh
+                                   - Morphs rigged clothing!
+                                              │
+                                              ▼
+                                   [Measure Delta Z Neck Seam]
+                                              │
+                                              ▼
+                                   [Restore Shielded Meshes]
+                                              │
+                                              ▼
+                                   [1:1 SL Bento Face Engine]
+                                   - Effective scale: S_eff = S_shape / S_bind
+                                   - Neck anchor: X, Y *= S_eff (tracks neck thickness slider)
+                                   - Vertical seam: Z += Delta Z_neck (locks seam height)
+                                              │
+                                              ▼
+                                   [1:1 SL Bone Hair Engine]
+                                   - FK position & head scale
+                                   - Non-destructive shape key
+```
+
+### 4-Way Mesh Classification (`should_shield_from_avastar`)
+
+| Classification | Vertex Weight Signature | Pipeline Treatment |
+| :--- | :--- | :--- |
+| **Bento Facial Features** | Weights on `mFace*` (e.g. `mFaceNoseCenter`, `mFaceChin`) and NO torso/limb weights | **Shielded from Avastar**. Shaped by 1:1 SL Bento Face Engine using Collada inverse bind scale inversion ($S_{\text{eff}} = S_{\text{shape}} / S_{\text{bind}}$), horizontal neck thickness scaling tracking $S_{\text{eff}}$, and vertical neck seam anchoring. |
+| **Rigged Hair & Head Attachments** | Weights on head attachment bones (`mHead`, `HEAD`, `mSkull`, `mFaceRoot`) and no Bento facial feature weights (`mFace*`) | **Shielded from Avastar**. Shaped by 1:1 SL Bone Hair Engine using FK translation and scale from shape XML into a non-destructive `SL_Avatar_Shape` shape key. Hair strand weights on upper torso/back do not cause hair to leak into Avastar sliders. |
+| **Unrigged Static Meshes** | 0 vertex groups (bangs, glasses, earrings) | **Shielded from all shaping**. Preserved as static objects. |
+| **Rigged Body Clothing & Outfit Items** | Weights on `mPelvis`, `mTorso`, limbs, or collision volumes (`BELLY`, `CHEST`, `UPPER_BACK`, `L/R_CLAVICLE`) | **Not shielded (Avastar shaped)**. Bound to rig before Avastar's slider pass so clothing, catsuits, and accessories (e.g. collars/chokers with incidental `mFaceJaw` weights) scale and morph seamlessly to body contours. |
+
+### Universal Body Isolation & Visibility (`setup_devkit_visibility`)
+
+Modern Second Life DevKits and multi-part avatar exports bundle multiple mesh permutations within the same file (primary bodies, alternate breast/deformer variations, alternate flat/mid/high feet, hand poses, custom shape deformers, and rig bone widgets).
+
+The add-on automatically identifies the primary body mesh across all body brands (Maitreya Lara/LaraX, Legacy, Kupra, eBODY Reborn, Belleza Gen.X/Jake, Inithium, Slink, Erika, Prima, StarMesh, or unbranded bodies) and enforces clean visibility by setting both `obj.hide_viewport = True` and `obj.hide_render = True` across bone custom shape widgets (`WGT_`, `cs_`), collision hulls, and alternate cut variations. This prevents alternate geometries from rendering on top of the base body in Cycles/EEVEE and causing clipping or z-fighting through rigged clothing.
+
+---
+
 ## Directory Organization
 
 The suite utilizes clean, dynamic folders in your **Documents** directory (completely decoupled from any hardcoded username):
@@ -34,7 +106,7 @@ The suite utilizes clean, dynamic folders in your **Documents** directory (compl
 ```text
 Documents/
 └── SecondLife/
-    ├── Kits/                          # Avastar DevKit .blend files (eBODY Reborn, etc.)
+    ├── Kits/                          # Avastar DevKit .blend files (Maitreya, Legacy, Kupra, Reborn, etc.)
     └── Exports/
         ├── Mesh/                      # Default destination for Mesh items
         └── PBR/                       # Default destination for PBR materials

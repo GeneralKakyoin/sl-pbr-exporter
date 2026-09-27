@@ -10,13 +10,16 @@ import mathutils
 from ..config import (
     COLORSPACE_NON_COLOR,
     COLORSPACE_SRGB,
+    deselect_all_objects,
+    ensure_object_mode,
     get_principled_socket,
     set_material_blend_method,
 )
+from .sl_shape_engine import BENTO_FACIAL_FEATURE_BONES, BODY_TORSO_BONES
 
 
 def get_devkit_armature(scene: Optional[bpy.types.Scene] = None) -> Optional[bpy.types.Object]:
-    """Locate the DevKit Avastar armature ('Avatar' or rig containing 'avastar') in the scene."""
+    """Locate the DevKit / avatar armature in the scene."""
     sc = scene or bpy.context.scene
 
     # Check for exact 'Avatar' name first
@@ -29,12 +32,136 @@ def get_devkit_armature(scene: Optional[bpy.types.Scene] = None) -> Optional[bpy
         if obj.type == "ARMATURE" and "avastar" in obj.name.lower():
             return obj
 
+    # Fallback to any armature containing standard SL joints
+    for obj in sc.objects:
+        if obj.type == "ARMATURE" and obj.data:
+            if any(b in obj.data.bones for b in ("mPelvis", "mHead", "mChest")):
+                return obj
+
     # Fallback to any armature in the scene
     for obj in sc.objects:
         if obj.type == "ARMATURE":
             return obj
 
     return None
+
+
+def find_body_mesh(
+    scene: Optional[bpy.types.Scene] = None,
+    candidates: Optional[List[bpy.types.Object]] = None,
+) -> Optional[bpy.types.Object]:
+    """Universally locate the primary avatar body mesh across all body brands and devkits.
+
+    Evaluates bone coverage across standard Second Life body deformation bones (BODY_TORSO_BONES),
+    excluding facial-only meshes and hair/attachments, and weighting regional distribution.
+    Supports Reborn, Maitreya Lara/LaraX, Legacy, Kupra, Belleza Gen.X/Jake, Inithium,
+    Slink, Erika, Prima, StarMesh, generic 'Body', and unbranded body meshes.
+    """
+    sc = scene or bpy.context.scene
+    pool = candidates if candidates is not None else [o for o in sc.objects if o.type == "MESH"]
+
+    scored_candidates = []
+
+    body_keywords = (
+        "body", "reborn", "maitreya", "lara", "legacy", "kupra",
+        "belleza", "gen.x", "genx", "inithium", "slink", "erika",
+        "physique", "hourglass", "kario", "prima", "starmesh", "female", "male"
+    )
+    clothing_keywords = (
+        "dress", "skirt", "pants", "shirt", "top", "jacket", "coat",
+        "shoe", "boot", "hair", "glove", "hat", "corset", "suit",
+        "bra", "panty", "lingerie", "outfit", "earring", "necklace", "collar"
+    )
+    helper_keywords = (
+        "customshape", "wgt_", "cs_", "helper", "widget", "bone_shape", "rig_shape"
+    )
+
+    for obj in pool:
+        if not obj or obj.type != "MESH" or not obj.data:
+            continue
+        v_count = len(obj.data.vertices)
+        if v_count < 3:
+            continue
+
+        name_lower = obj.name.lower()
+        if any(h in name_lower for h in helper_keywords):
+            continue
+
+        if not obj.vertex_groups:
+            continue
+
+        vnames = {g.index: g.name for g in obj.vertex_groups}
+        vnames_set = set(vnames.values())
+
+        # Check presence of body bones
+        body_bones_present = vnames_set.intersection(BODY_TORSO_BONES)
+        if not body_bones_present:
+            continue
+
+        # Check facial feature bones: if mesh has many facial bones and few body bones, it's a head/collar
+        facial_bones_present = vnames_set.intersection(BENTO_FACIAL_FEATURE_BONES)
+        if len(facial_bones_present) > 10 and len(body_bones_present) < 5:
+            continue
+
+        score = 0
+
+        # Keyword matching
+        if any(k in name_lower for k in body_keywords):
+            score += 150
+        if any(k in name_lower for k in clothing_keywords):
+            score -= 100
+        if "+" in obj.name or "_feet_" in name_lower or "_hand_" in name_lower:
+            score -= 30
+
+        # Regional coverage across pelvis, torso, chest, legs, arms
+        has_pelvis = any(b in vnames_set for b in ('mPelvis', 'PELVIS', 'BUTT'))
+        has_torso = any(b in vnames_set for b in ('mTorso', 'mSpine1', 'mSpine2', 'mSpine3', 'mSpine4'))
+        has_chest = any(b in vnames_set for b in ('mChest', 'CHEST', 'UPPER_BACK'))
+        has_legs = any(b in vnames_set for b in ('mHipLeft', 'mHipRight', 'mKneeLeft', 'mKneeRight', 'mAnkleLeft', 'mAnkleRight'))
+        has_arms = any(b in vnames_set for b in ('mShoulderLeft', 'mShoulderRight', 'mElbowLeft', 'mElbowRight', 'mWristLeft', 'mWristRight'))
+
+        regions_covered = sum([has_pelvis, has_torso, has_chest, has_legs, has_arms])
+        score += regions_covered * 35  # Max 175 for full body coverage
+
+        # Vertex count weighting
+        score += min(v_count // 100, 50)
+
+        scored_candidates.append((score, obj))
+
+    if scored_candidates:
+        scored_candidates.sort(key=lambda x: x[0], reverse=True)
+        return scored_candidates[0][1]
+
+    # Fallback to any mesh with 'body' in name
+    for obj in pool:
+        if obj and obj.type == "MESH" and "body" in obj.name.lower() and obj.data and len(obj.data.vertices) > 0:
+            return obj
+
+    return None
+
+
+def align_armature_to_blender_space(arm_obj: bpy.types.Object) -> None:
+    """Rotate imported Second Life Collada armature -90 degrees around Z to face Blender Front (-Y).
+
+    Bakes rotation into rest bones and resets matrix_world to Identity.
+    """
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        return
+    if arm_obj.get("sl_aligned_to_devkit", False):
+        return
+
+    R = mathutils.Matrix.Rotation(math.radians(-90.0), 4, "Z")
+    arm_obj.matrix_world = R @ arm_obj.matrix_world
+    ensure_object_mode()
+    deselect_all_objects()
+    arm_obj.select_set(True)
+    bpy.context.view_layer.objects.active = arm_obj
+    try:
+        bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
+    except Exception as e:
+        print(f"[Importer] Warning applying rotation to armature: {e}")
+    arm_obj["sl_aligned_to_devkit"] = True
+    deselect_all_objects()
 
 
 def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Object], Optional[bpy.types.Object]]:
@@ -50,16 +177,11 @@ def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Objec
 
     loaded_objects = []
     with bpy.data.libraries.load(str(blend_path), link=False) as (data_from, data_to):
-        # Prefer specific DevKit objects if present
-        needed = {"Avatar", "RebornBody"}
-        target_names = [name for name in data_from.objects if name in needed]
-        if not target_names:
-            # If named differently, take all objects in the dev kit
-            target_names = [name for name in data_from.objects if name not in ("Camera", "Light")]
+        # Exclude lights and cameras, load all potential avatar objects
+        target_names = [name for name in data_from.objects if name not in ("Camera", "Light")]
         data_to.objects = target_names
 
     armature_obj = None
-    body_obj = None
 
     for obj in data_to.objects:
         if not obj:
@@ -70,25 +192,70 @@ def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Objec
 
         if obj.type == "ARMATURE" and not armature_obj:
             armature_obj = obj
-        elif "body" in obj.name.lower() or obj.name == "RebornBody":
-            body_obj = obj
-            obj.hide_viewport = False
-            obj.hide_render = False
+
+    # Universal body mesh discovery among loaded objects
+    body_obj = find_body_mesh(scene, candidates=loaded_objects)
+    if body_obj:
+        body_obj.hide_viewport = False
+        body_obj.hide_render = False
+
+    setup_devkit_visibility(scene)
 
     return armature_obj, body_obj
 
 
-def setup_devkit_visibility() -> None:
-    """Clean up devkit visibility: keep RebornBody visible, hide alternate body variations."""
-    body = bpy.data.objects.get("RebornBody")
+def setup_devkit_visibility(scene: Optional[bpy.types.Scene] = None) -> None:
+    """Clean up avatar and devkit visibility across all body brands:
+    - Keep primary body mesh visible.
+    - Hide bone custom shape widgets (pb.custom_shape).
+    - Hide helper meshes and collision hulls (< 30 verts).
+    - Hide alternate body variation meshes (e.g. +Juicy, _Feet_Flat if main body is present).
+    """
+    sc = scene or bpy.context.scene
+    body = find_body_mesh(sc)
     if body:
         body.hide_viewport = False
         body.hide_render = False
 
-    hide_prefixes = ("RebornBody+", "RebornFeet_", "CustomShape_")
-    for obj in bpy.data.objects:
-        if any(obj.name.startswith(p) for p in hide_prefixes) and obj != body:
+    # 1. Collect rig widget custom shapes from all armatures
+    rig_widgets = set()
+    for obj in sc.objects:
+        if obj.type == "ARMATURE" and obj.pose:
+            for pb in obj.pose.bones:
+                if pb.custom_shape:
+                    rig_widgets.add(pb.custom_shape)
+
+    # 2. Helper prefixes/substrings common across devkits
+    helper_prefixes = ("customshape", "wgt_", "cs_", "helper_", "widget_", "bone_shape", "rig_shape", "collision_hull")
+
+    body_name = body.name if body else None
+
+    for obj in sc.objects:
+        if obj == body:
+            continue
+        if obj in rig_widgets:
             obj.hide_viewport = True
+            obj.hide_render = True
+            continue
+
+        name_lower = obj.name.lower()
+        if any(name_lower.startswith(p) for p in helper_prefixes):
+            obj.hide_viewport = True
+            obj.hide_render = True
+            continue
+
+        # Hide collision hulls
+        if obj.type == "MESH" and obj.data and len(obj.data.vertices) < 30:
+            obj.hide_viewport = True
+            obj.hide_render = True
+            continue
+
+        # Hide alternate body variations (e.g. RebornBody+Juicy, Maitreya_Feet_Flat when main body is present)
+        if body_name:
+            if obj.name.startswith(f"{body_name}+") or obj.name.startswith(f"{body_name}_"):
+                obj.hide_viewport = True
+                obj.hide_render = True
+                continue
 
 
 def align_item_to_devkit(mesh_obj: bpy.types.Object) -> None:
@@ -106,6 +273,26 @@ def align_item_to_devkit(mesh_obj: bpy.types.Object) -> None:
     mesh_obj.matrix_world = mathutils.Matrix.Identity(4)
     mesh_obj["sl_aligned_to_devkit"] = True
     mesh_obj.data.update()
+
+
+def is_skin_material(mat: bpy.types.Material) -> bool:
+    """Determine if a material belongs to an avatar skin surface (body or head)."""
+    if not mat:
+        return False
+    name_lower = mat.name.lower()
+    skin_patterns = (
+        "skin", "head", "face", "torso", "legs", "leg", "arms", "arm", "body",
+        "ears", "ear", "neck", "upper", "lower", "reborn", "maitreya", "lara",
+        "legacy", "kupra", "belleza", "inithium", "slink", "erika", "bom", "bakesonmesh"
+    )
+    if any(p in name_lower for p in skin_patterns):
+        exclude = (
+            "suit", "armor", "jewelry", "earring", "phone", "chain", "cloth",
+            "corset", "dress", "pant", "hair", "shoe", "boot", "glove"
+        )
+        if not any(ex in name_lower for ex in exclude):
+            return True
+    return False
 
 
 def wire_material_textures(
@@ -235,20 +422,7 @@ def wire_material_textures(
 
     # 3. Wire Diffuse / Base Color
     diff_color = m_color or getattr(mat, "diffuse_color", [1.0, 1.0, 1.0, 1.0])
-    is_skin = any(
-        mat.name.lower().startswith(p)
-        for p in (
-            "skin_",
-            "mat_skin_",
-            "mat_body_upper",
-            "mat_body_lower",
-            "mat_head",
-            "body_upper",
-            "body_lower",
-            "head_mat",
-            "rebornbody",
-        )
-    )
+    is_skin = is_skin_material(mat)
 
     if diff_file and diff_file.exists():
         img = bpy.data.images.load(str(diff_file), check_existing=True)
@@ -471,8 +645,17 @@ def import_and_bind_item(
             continue
         if obj.type == "MESH":
             imported_meshes.append(obj)
-        elif obj.type == "ARMATURE" and obj != devkit_arm:
+        elif obj.type == "ARMATURE":
+            if devkit_arm and obj == devkit_arm:
+                continue
             stray_armatures.append(obj)
+
+    # If no devkit_arm was provided, adopt the first imported armature as the avatar armature
+    target_arm = devkit_arm
+    if not target_arm and stray_armatures:
+        target_arm = stray_armatures.pop(0)
+        target_arm.name = "Avatar"
+        align_armature_to_blender_space(target_arm)
 
     # Collection setup
     item_stem = dae_path.stem
@@ -490,16 +673,16 @@ def import_and_bind_item(
             c.objects.unlink(mesh_obj)
         target_coll.objects.link(mesh_obj)
 
-        # Add or update Armature modifier if devkit_arm provided
-        if devkit_arm:
+        # Add or update Armature modifier if target_arm provided
+        if target_arm:
             arm_mod = next((m for m in mesh_obj.modifiers if m.type == "ARMATURE"), None)
             if not arm_mod:
                 arm_mod = mesh_obj.modifiers.new(name="Armature", type="ARMATURE")
-            arm_mod.object = devkit_arm
-            mesh_obj.parent = devkit_arm
+            arm_mod.object = target_arm
+            mesh_obj.parent = target_arm
 
-    # Remove stray Collada armature from DAE import if devkit_arm is active
-    if devkit_arm:
+    # Remove extra duplicate armatures from this DAE import
+    if target_arm:
         for arm in stray_armatures:
             bpy.data.objects.remove(arm, do_unlink=True)
 

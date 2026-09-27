@@ -19,6 +19,7 @@ from ..config import (
 from ..importer.devkit_binder import (
     align_item_to_devkit,
     append_devkit_from_blend,
+    find_body_mesh,
     get_devkit_armature,
     hide_inactive_linkset_meshes,
     import_and_bind_item,
@@ -30,6 +31,7 @@ from ..importer.sl_shape_engine import (
     apply_exact_sl_shape_to_meshes,
     apply_exact_sl_shape_to_rigged_hair,
     parse_shape_xml_bones,
+    should_shield_from_avastar,
     FACIAL_BONE_NAMES,
     BENTO_FACIAL_FEATURE_BONES,
     BODY_TORSO_BONES,
@@ -75,7 +77,7 @@ class SL_ImporterProperties(PropertyGroup):
 
     devkit_blend_path: StringProperty(
         name="DevKit .blend",
-        description="Path to Avastar DevKit .blend file (e.g. eBODY Reborn)",
+        description="Path to Avastar DevKit .blend file (optional, for Avastar DevKits)",
         subtype="FILE_PATH",
         default=str(get_default_devkit_blend_path() or ""),
     )
@@ -156,7 +158,7 @@ class SL_OT_DeselectAllItems(Operator):
 
 
 class SL_OT_LoadSelectedItems(Operator):
-    """Import selected items and bind them onto the Avastar DevKit rig."""
+    """Import selected items and bind them onto the avatar rig."""
     bl_idname = "sl_suite.load_selected_items"
     bl_label = "Load Selected Items onto DevKit"
     bl_description = "Import checked items, auto-append DevKit if missing, apply shape, and bind to rig"
@@ -181,61 +183,9 @@ class SL_OT_LoadSelectedItems(Operator):
                     devkit_arm, devkit_body = append_devkit_from_blend(dk_path)
                     self.report({"INFO"}, f"Appended DevKit from {dk_path.name}")
                 except Exception as e:
-                    self.report({"ERROR"}, f"Failed to append DevKit: {e}")
-                    return {"CANCELLED"}
+                    self.report({"WARNING"}, f"Could not append DevKit: {e}")
 
-        if not devkit_arm:
-            self.report({"ERROR"}, "No DevKit armature found in scene, and could not append one. Please check DevKit path.")
-            return {"CANCELLED"}
-
-        # Clean devkit visibility (keep RebornBody visible, hide alternate meshes)
-        setup_devkit_visibility()
-
-        # 2. If apply_shape is enabled, shape the DevKit armature & body FIRST
-        # This prevents Avastar's import_shape from displacing child items later.
-        shape_path = None
-        delta_neck_z = 0.0
-        folder = Path(bpy.path.abspath(props.folder_path.strip())) if props.folder_path else None
-        if props.apply_shape and folder:
-            shape_path = find_shape_xml(folder)
-
-        if shape_path and devkit_arm and hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
-            body_mesh = devkit_body or context.scene.objects.get("RebornBody")
-            if not body_mesh:
-                for o in context.scene.objects:
-                    if o.type == "MESH" and "body" in o.name.lower() and o.data and len(o.data.vertices) > 0:
-                        body_mesh = o
-                        break
-
-            unshaped_neck_z = None
-            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
-                neck_candidates_before = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
-                if neck_candidates_before:
-                    unshaped_neck_z = max(neck_candidates_before)
-
-            try:
-                ensure_object_mode()
-                deselect_all_objects()
-                devkit_arm.select_set(True)
-                context.view_layer.objects.active = devkit_arm
-                bpy.ops.avastar.import_shape(filepath=str(shape_path))
-                context.view_layer.update()
-                self.report({"INFO"}, f"Applied DevKit body shape: {shape_path.name}")
-
-                # Measure neck vertical offset directly from body mesh vertex seam (step 423 reference),
-                # with deterministic fallback to mNeck bone head
-                if body_mesh and unshaped_neck_z is not None:
-                    neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
-                    if neck_candidates_after:
-                        delta_neck_z = max(neck_candidates_after) - unshaped_neck_z
-                elif devkit_arm.data and "mNeck" in devkit_arm.data.bones:
-                    delta_neck_z = devkit_arm.data.bones["mNeck"].head_local.z - 1.607073
-                elif "mNeck" in devkit_arm.pose.bones:
-                    delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.607073
-            except Exception as e:
-                self.report({"WARNING"}, f"DevKit body shape application warning: {e}")
-
-        # 3. Import and bind checked items onto the (already shaped) DevKit
+        # 2. Import and bind all checked items onto the rig
         total_imported_meshes = []
         for item in selected:
             f_path = Path(item.path)
@@ -247,16 +197,82 @@ class SL_OT_LoadSelectedItems(Operator):
                 if item.item_type == "DAE":
                     imported = import_and_bind_item(f_path, devkit_arm=devkit_arm, textures_dir=tex_dir)
                     total_imported_meshes.extend(imported)
+                    if not devkit_arm:
+                        devkit_arm = get_devkit_armature(context.scene)
             except Exception as e:
                 self.report({"ERROR"}, f"Error importing '{item.name}': {e}")
+
+        # Clean devkit visibility (keep primary body visible, hide alternate cuts and widgets)
+        setup_devkit_visibility()
+
+        # Find primary body mesh universally
+        body_mesh = devkit_body or find_body_mesh(context.scene)
 
         # Inactive linkset meshes (< 30 verts or all zero alpha) are auto-hidden by import_and_bind_item,
         # but run explicitly here across all meshes to ensure complete consistency.
         hide_inactive_linkset_meshes(total_imported_meshes)
 
-        # 4. Apply exact 1:1 SL shape to facial meshes
-        if shape_path and total_imported_meshes:
-            folder = shape_path.parent
+        # 3. Apply Shape (Hybrid Pipeline)
+        shape_path = None
+        folder = Path(bpy.path.abspath(props.folder_path.strip())) if props.folder_path else None
+        if props.apply_shape and folder:
+            shape_path = find_shape_xml(folder)
+
+        if shape_path and devkit_arm:
+            delta_neck_z = 0.0
+            unshaped_neck_z = None
+            if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
+                neck_candidates_before = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                if neck_candidates_before:
+                    unshaped_neck_z = max(neck_candidates_before)
+
+            # Shield Bento facial items, hair, and unrigged meshes from Avastar slider mutation
+            protected_meshes = []
+            for obj in total_imported_meshes:
+                if not obj or obj.type != "MESH":
+                    continue
+                if should_shield_from_avastar(obj):
+                    mw = obj.matrix_world.copy()
+                    obj.parent = None
+                    obj.matrix_world = mw
+                    arm_mod = next((m for m in obj.modifiers if m.type == "ARMATURE"), None)
+                    arm_target = arm_mod.object if arm_mod else None
+                    if arm_mod:
+                        arm_mod.object = None
+                    protected_meshes.append((obj, mw, arm_mod, arm_target))
+
+            # Run Avastar body & clothing shape pass: shapes rest bones, RebornBody, and all attached rigged clothing
+            if hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
+                try:
+                    ensure_object_mode()
+                    deselect_all_objects()
+                    devkit_arm.select_set(True)
+                    context.view_layer.objects.active = devkit_arm
+                    bpy.ops.avastar.import_shape(filepath=str(shape_path))
+                    context.view_layer.update()
+                    self.report({"INFO"}, f"Applied DevKit body & clothing shape: {shape_path.name}")
+
+                    # Measure neck vertical offset directly from body mesh vertex seam (step 423 reference),
+                    # with deterministic fallback to mNeck bone head
+                    if body_mesh and unshaped_neck_z is not None:
+                        neck_candidates_after = [v.co.z for v in body_mesh.data.vertices if v.co.z > 1.4]
+                        if neck_candidates_after:
+                            delta_neck_z = max(neck_candidates_after) - unshaped_neck_z
+                    elif devkit_arm.data and "mNeck" in devkit_arm.data.bones:
+                        delta_neck_z = devkit_arm.data.bones["mNeck"].head_local.z - 1.607073
+                    elif "mNeck" in devkit_arm.pose.bones:
+                        delta_neck_z = devkit_arm.pose.bones["mNeck"].head.z - 1.607073
+                except Exception as e:
+                    self.report({"WARNING"}, f"DevKit body shape application warning: {e}")
+
+            # Restore shielded meshes
+            for obj, mw, arm_mod, arm_target in protected_meshes:
+                obj.parent = devkit_arm
+                obj.matrix_world = mw
+                if arm_mod and arm_target:
+                    arm_mod.object = arm_target
+
+            # 4. Apply exact 1:1 SL shape to facial meshes
             selected_daes = [Path(item.path) for item in selected if item.item_type == "DAE" and Path(item.path).exists()]
             applied_count = apply_exact_sl_shape_to_meshes(
                 meshes=total_imported_meshes,
@@ -308,43 +324,42 @@ class SL_OT_LoadSelectedItems(Operator):
         except Exception:
             pass
 
-        self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto '{devkit_arm.name}' rig with textures!")
+        arm_label = f"'{devkit_arm.name}'" if devkit_arm else "avatar"
+        self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto {arm_label} rig with textures!")
         return {"FINISHED"}
 
 
 
 class SL_OT_TransferWeights(Operator):
-    """Transfer / Refit vertex weights from the Reborn body mesh onto the active item."""
+    """Transfer / Refit vertex weights from the avatar body mesh onto the active item."""
     bl_idname = "sl_suite.transfer_weights"
     bl_label = "Transfer Weights from Body"
-    bl_description = "Project vertex weights from RebornBody to active item and clamp to 4 weights per vertex"
+    bl_description = "Project vertex weights from the avatar body mesh to active item and clamp to 4 weights per vertex"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
     def poll(cls, context):
-        return (
-            context.active_object
-            and context.active_object.type == "MESH"
-            and context.active_object.name != "RebornBody"
-        )
+        if not context.active_object or context.active_object.type != "MESH":
+            return False
+        body = find_body_mesh(context.scene)
+        return body is not None and context.active_object != body
 
     def execute(self, context):
         ensure_object_mode()
         active_mesh = context.active_object
-        reborn_body = context.scene.objects.get("RebornBody")
-        if not reborn_body:
-            # Fallback to any body mesh in scene
-            for o in context.scene.objects:
-                if o.type == "MESH" and "body" in o.name.lower() and o != active_mesh:
-                    reborn_body = o
-                    break
+        body = find_body_mesh(context.scene)
 
-        if not reborn_body:
-            self.report({"ERROR"}, "Source mesh 'RebornBody' not found in current scene.")
+        if not body:
+            self.report({"ERROR"}, "Avatar body mesh not found in current scene.")
             return {"CANCELLED"}
 
+        # Generate target vertex groups on active mesh if not already present
+        for src_group in body.vertex_groups:
+            if src_group.name not in active_mesh.vertex_groups:
+                active_mesh.vertex_groups.new(name=src_group.name)
+
         dt_mod = active_mesh.modifiers.new(name="WeightTransfer", type="DATA_TRANSFER")
-        dt_mod.object = reborn_body
+        dt_mod.object = body
         dt_mod.use_vert_data = True
         dt_mod.data_types_verts = {"VGROUP_WEIGHTS"}
         dt_mod.vert_mapping = "NEAREST"
@@ -353,10 +368,14 @@ class SL_OT_TransferWeights(Operator):
         bpy.ops.object.modifier_apply(modifier=dt_mod.name)
 
         # Enforce Second Life 4-weight limit
-        bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
-        bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL")
+        if active_mesh.vertex_groups:
+            try:
+                bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+                bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL")
+            except Exception:
+                pass
 
-        self.report({"INFO"}, f"Transferred weights from '{reborn_body.name}' to '{active_mesh.name}' (max 4 weights/vert).")
+        self.report({"INFO"}, f"Transferred weights from '{body.name}' to '{active_mesh.name}' (max 4 weights/vert).")
         return {"FINISHED"}
 
 

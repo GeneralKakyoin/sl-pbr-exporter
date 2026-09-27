@@ -16,6 +16,7 @@ from sl_pbr_exporter.importer.sl_shape_engine import (
     apply_exact_sl_shape_to_meshes,
     apply_exact_sl_shape_to_rigged_hair,
     is_rigged_hair_or_attachment,
+    should_shield_from_avastar,
 )
 
 
@@ -348,12 +349,17 @@ class TestShapeEngine(unittest.TestCase):
             )
             self.assertEqual(count, 1)
             sk = mesh.shape_keys.key_blocks["SL_Avatar_Shape"]
-            # Verify that X and Y coordinates of mNeck vertices are untouched, only Z shifted by delta_neck
+            # Verify that X and Y coordinates of mNeck vertices scale horizontally by s_eff around neck anchor,
+            # and Z shifts by delta_neck
             for idx in range(len(mesh.vertices) - 1):
                 orig_v = mesh.vertices[idx]
                 sk_v = sk.data[idx]
-                self.assertAlmostEqual(sk_v.co.x, orig_v.co.x, places=4)
-                self.assertAlmostEqual(sk_v.co.y, orig_v.co.y, places=4)
+                # In SL space (for non-aligned test obj: X forward, Y left, Z up)
+                # dx = orig_v.x - (-0.0249), dy = orig_v.y - 0.0
+                expected_x = -0.024875 + 0.75 * (orig_v.co.x - (-0.024875))
+                expected_y = 0.80 * orig_v.co.y
+                self.assertAlmostEqual(sk_v.co.x, expected_x, places=4)
+                self.assertAlmostEqual(sk_v.co.y, expected_y, places=4)
                 self.assertAlmostEqual(sk_v.co.z - orig_v.co.z, -0.05, places=4)
 
         bpy.data.objects.remove(obj, do_unlink=True)
@@ -471,6 +477,75 @@ class TestShapeEngine(unittest.TestCase):
             bpy.data.meshes.remove(m, do_unlink=True)
         bpy.data.objects.remove(arm_obj, do_unlink=True)
         bpy.data.armatures.remove(arm_data, do_unlink=True)
+
+    def test_should_shield_from_avastar(self):
+        """Verify mesh classification for Avastar shape shielding."""
+        # Non-mesh or None
+        self.assertFalse(should_shield_from_avastar(None))
+
+        # 1. Unrigged mesh (0 vertex groups) -> Shielded (True)
+        mesh_unrigged = bpy.data.meshes.new("UnriggedMesh")
+        obj_unrigged = bpy.data.objects.new("UnriggedObj", mesh_unrigged)
+        mesh_unrigged.from_pydata([(0, 0, 0)], [], [])
+        self.assertTrue(should_shield_from_avastar(obj_unrigged))
+
+        # 2. Bento head / facial mesh (weighted to mFaceNoseCenter) -> Shielded (True)
+        mesh_bento = bpy.data.meshes.new("BentoMesh")
+        obj_bento = bpy.data.objects.new("BentoObj", mesh_bento)
+        mesh_bento.from_pydata([(0, 0, 1.7)], [], [])
+        vg_bento = obj_bento.vertex_groups.new(name="mFaceNoseCenter")
+        vg_bento.add([0], 1.0, 'REPLACE')
+        self.assertTrue(should_shield_from_avastar(obj_bento))
+
+        # 3. Rigged hair (weighted to mHead/HEAD, even with chest/upper back contact) -> Shielded (True)
+        mesh_hair = bpy.data.meshes.new("HairMesh")
+        obj_hair = bpy.data.objects.new("HairObj", mesh_hair)
+        mesh_hair.from_pydata([(0, 0, 1.7), (0, 0.1, 1.4)], [], [])
+        vg_hair_head = obj_hair.vertex_groups.new(name="mHead")
+        vg_hair_head.add([0], 1.0, 'REPLACE')
+        vg_hair_back = obj_hair.vertex_groups.new(name="UPPER_BACK")
+        vg_hair_back.add([1], 0.5, 'REPLACE')
+        self.assertTrue(should_shield_from_avastar(obj_hair))
+
+        # 4. Rigged clothing (catsuit / pants / boots weighted to mPelvis and collision volumes) -> NOT shielded (False)
+        mesh_cloth = bpy.data.meshes.new("ClothMesh")
+        obj_cloth = bpy.data.objects.new("ClothObj", mesh_cloth)
+        mesh_cloth.from_pydata([(0, 0, 1.0)], [], [])
+        vg_cloth = obj_cloth.vertex_groups.new(name="mPelvis")
+        vg_cloth.add([0], 1.0, 'REPLACE')
+        self.assertFalse(should_shield_from_avastar(obj_cloth))
+
+        # 5. Rigged mittens/gloves (weighted to mWristLeft / mHandLeft) -> NOT shielded (False)
+        mesh_mitten = bpy.data.meshes.new("MittenMesh")
+        obj_mitten = bpy.data.objects.new("MittenObj", mesh_mitten)
+        mesh_mitten.from_pydata([(0.5, 0, 1.2)], [], [])
+        vg_mitten = obj_mitten.vertex_groups.new(name="mWristLeft")
+        vg_mitten.add([0], 1.0, 'REPLACE')
+        self.assertFalse(should_shield_from_avastar(obj_mitten))
+
+        # 6. Rigged collar / choker (weighted to mNeck, CHEST, and incidental mFaceJaw) -> NOT shielded (False)
+        mesh_collar = bpy.data.meshes.new("CollarMesh")
+        obj_collar = bpy.data.objects.new("CollarObj", mesh_collar)
+        mesh_collar.from_pydata([(0, 0, 1.6)], [], [])
+        vg_collar_neck = obj_collar.vertex_groups.new(name="mNeck")
+        vg_collar_neck.add([0], 0.5, 'REPLACE')
+        vg_collar_chest = obj_collar.vertex_groups.new(name="CHEST")
+        vg_collar_chest.add([0], 0.3, 'REPLACE')
+        vg_collar_jaw = obj_collar.vertex_groups.new(name="mFaceJaw")
+        vg_collar_jaw.add([0], 0.2, 'REPLACE')
+        self.assertFalse(should_shield_from_avastar(obj_collar))
+
+        # Clean up
+        for o, m in [
+            (obj_unrigged, mesh_unrigged),
+            (obj_bento, mesh_bento),
+            (obj_hair, mesh_hair),
+            (obj_cloth, mesh_cloth),
+            (obj_mitten, mesh_mitten),
+            (obj_collar, mesh_collar),
+        ]:
+            bpy.data.objects.remove(o, do_unlink=True)
+            bpy.data.meshes.remove(m, do_unlink=True)
 
 
 if __name__ == "__main__":

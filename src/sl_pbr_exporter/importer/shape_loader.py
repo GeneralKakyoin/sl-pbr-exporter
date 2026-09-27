@@ -66,8 +66,10 @@ def parse_shape_xml(shape_xml_path: Path) -> Dict[str, Any]:
     }
 
 
+from .devkit_binder import find_body_mesh
 from .sl_shape_engine import (
     apply_exact_sl_shape_to_meshes,
+    should_shield_from_avastar,
     FACIAL_BONE_NAMES,
     BENTO_FACIAL_FEATURE_BONES,
     BODY_TORSO_BONES,
@@ -97,12 +99,7 @@ def apply_shape_xml(
     if devkit_arm and hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
         try:
             # Find body mesh to protect attached meshes
-            body_mesh = bpy.context.scene.objects.get("RebornBody")
-            if not body_mesh:
-                for o in bpy.context.scene.objects:
-                    if o.type == "MESH" and "body" in o.name.lower() and o.data and len(o.data.vertices) > 0:
-                        body_mesh = o
-                        break
+            body_mesh = find_body_mesh(bpy.context.scene)
 
             unshaped_neck_z = None
             if body_mesh and body_mesh.data and len(body_mesh.data.vertices) > 0:
@@ -110,11 +107,13 @@ def apply_shape_xml(
                 if neck_candidates_before:
                     unshaped_neck_z = max(neck_candidates_before)
 
-            # Protect attached meshes from Avastar's slider vertex mutation and parenting displacement
+            # Shield Bento facial items, hair, and unrigged meshes from Avastar slider mutation
             protected_modifiers = []
             protected_parents = []
             for obj in bpy.context.scene.objects:
                 if obj == devkit_arm or obj == body_mesh:
+                    continue
+                if not should_shield_from_avastar(obj):
                     continue
 
                 if obj.parent == devkit_arm:
