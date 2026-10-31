@@ -29,5 +29,6 @@ Thumbs.db
 
 # Bake caches and local exports
 /exports/
+/export/
 /bake_cache/
 /tmp/
