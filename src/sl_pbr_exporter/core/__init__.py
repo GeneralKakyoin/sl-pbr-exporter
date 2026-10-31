@@ -1,1 +1,6 @@
-"""Core pipeline modules: inspector, baker, packer, and exporter."""
+"""Core pipeline modules: inspector, baker, packer, exporter, and deformer generator."""
+
+from .deformer_generator import DeformerGenerator
+
+__all__ = ["DeformerGenerator"]
+
