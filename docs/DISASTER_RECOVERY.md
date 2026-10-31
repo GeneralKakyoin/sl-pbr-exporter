@@ -88,14 +88,20 @@ C:\Users\<username>\Documents\SecondLife\
 
 ## 5. Build, Test & Deploy Commands
 
-### 1. Run the Headless Test Suite
-Verify that all 48 unit tests pass in Blender 5.2:
+### 1. Unified 1-Step Sync (Recommended)
+Builds packages, deploys to Blender 3.6 & 5.2, runs all 49 unit tests, and pushes to GitHub in one command:
+```powershell
+python scripts/sync_repo.py "feat: description of work"
+```
+
+### 2. Run the Headless Test Suite Individually
+Verify that all 49 unit tests pass in Blender 5.2:
 ```powershell
 & "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" --background --python tests/run_tests.py
 ```
-*Expected Output*: `OK (48 tests executed successfully)`
+*Expected Output*: `OK (49 tests executed successfully)`
 
-### 2. Build Release Packages
+### 3. Build Release Packages Individually
 Build dual ZIP distribution archives in `dist/`:
 ```powershell
 python scripts/build_packages.py
@@ -104,7 +110,7 @@ Generates:
 * `dist/sl_pbr_exporter-3.6-addon.zip`
 * `dist/sl_pbr_exporter-4.2-extension.zip`
 
-### 3. Deploy Directly to Live Blender Installations
+### 4. Deploy Directly to Live Blender Installations Individually
 Sync the latest codebase directly into your local Blender add-on and extension directories:
 ```powershell
 python scripts/deploy_to_blender.py
