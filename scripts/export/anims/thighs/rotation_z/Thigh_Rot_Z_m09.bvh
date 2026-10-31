@@ -1,0 +1,39 @@
+HIERARCHY
+ROOT hip
+{
+  OFFSET 0.000000 0.000000 0.000000
+  CHANNELS 6 Xposition Yposition Zposition Zrotation Xrotation Yrotation
+  JOINT mHipRight
+  {
+    OFFSET 0.033757 -0.126765 -0.040998
+    CHANNELS 3 Zrotation Xrotation Yrotation
+    JOINT mKneeRight
+    {
+      OFFSET -0.000000 0.000000 -0.440000
+      CHANNELS 3 Zrotation Xrotation Yrotation
+      End Site
+      {
+        OFFSET 0.000000 0.000000 -0.440000
+      }
+    }
+  }
+  JOINT mHipLeft
+  {
+    OFFSET 0.033757 0.126765 -0.040998
+    CHANNELS 3 Zrotation Xrotation Yrotation
+    JOINT mKneeLeft
+    {
+      OFFSET -0.000000 0.000000 -0.440000
+      CHANNELS 3 Zrotation Xrotation Yrotation
+      End Site
+      {
+        OFFSET 0.000000 0.000000 -0.440000
+      }
+    }
+  }
+}
+MOTION
+Frames: 2
+Frame Time: 0.033333
+0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 45.000000 0.000000 0.000000 0.000000 0.000000 0.000000 -45.000000 0.000000 0.000000 0.000000 0.000000 0.000000
+0.000000 0.000000 0.000000 0.000000 0.000000 0.000000 45.000000 0.000000 0.000000 0.000000 0.000000 0.000000 -45.000000 0.000000 0.000000 0.000000 0.000000 0.000000

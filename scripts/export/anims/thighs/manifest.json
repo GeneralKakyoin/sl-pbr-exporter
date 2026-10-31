@@ -1,0 +1,1096 @@
+{
+  "region": "thighs",
+  "priority": 5,
+  "duration": 0.0666667,
+  "fps": 30.0,
+  "num_steps": 10,
+  "pos_snap": 0.005,
+  "rot_snap": 5.0,
+  "scale_snap": 0.005,
+  "channels": {
+    "position_x": {
+      "category": "position",
+      "axis": "X",
+      "unit": "meters",
+      "snap": 0.005,
+      "steps": [
+        {
+          "name": "Thigh_Pos_X_p01",
+          "step_index": 1,
+          "value": 0.005,
+          "file_anim": "position_x\\Thigh_Pos_X_p01.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p02",
+          "step_index": 2,
+          "value": 0.01,
+          "file_anim": "position_x\\Thigh_Pos_X_p02.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p03",
+          "step_index": 3,
+          "value": 0.015,
+          "file_anim": "position_x\\Thigh_Pos_X_p03.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p04",
+          "step_index": 4,
+          "value": 0.02,
+          "file_anim": "position_x\\Thigh_Pos_X_p04.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p05",
+          "step_index": 5,
+          "value": 0.025,
+          "file_anim": "position_x\\Thigh_Pos_X_p05.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p06",
+          "step_index": 6,
+          "value": 0.03,
+          "file_anim": "position_x\\Thigh_Pos_X_p06.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p07",
+          "step_index": 7,
+          "value": 0.035,
+          "file_anim": "position_x\\Thigh_Pos_X_p07.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p08",
+          "step_index": 8,
+          "value": 0.04,
+          "file_anim": "position_x\\Thigh_Pos_X_p08.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p09",
+          "step_index": 9,
+          "value": 0.045,
+          "file_anim": "position_x\\Thigh_Pos_X_p09.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_p10",
+          "step_index": 10,
+          "value": 0.05,
+          "file_anim": "position_x\\Thigh_Pos_X_p10.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m01",
+          "step_index": -1,
+          "value": -0.005,
+          "file_anim": "position_x\\Thigh_Pos_X_m01.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m02",
+          "step_index": -2,
+          "value": -0.01,
+          "file_anim": "position_x\\Thigh_Pos_X_m02.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m03",
+          "step_index": -3,
+          "value": -0.015,
+          "file_anim": "position_x\\Thigh_Pos_X_m03.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m04",
+          "step_index": -4,
+          "value": -0.02,
+          "file_anim": "position_x\\Thigh_Pos_X_m04.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m05",
+          "step_index": -5,
+          "value": -0.025,
+          "file_anim": "position_x\\Thigh_Pos_X_m05.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m06",
+          "step_index": -6,
+          "value": -0.03,
+          "file_anim": "position_x\\Thigh_Pos_X_m06.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m07",
+          "step_index": -7,
+          "value": -0.035,
+          "file_anim": "position_x\\Thigh_Pos_X_m07.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m08",
+          "step_index": -8,
+          "value": -0.04,
+          "file_anim": "position_x\\Thigh_Pos_X_m08.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m09",
+          "step_index": -9,
+          "value": -0.045,
+          "file_anim": "position_x\\Thigh_Pos_X_m09.anim"
+        },
+        {
+          "name": "Thigh_Pos_X_m10",
+          "step_index": -10,
+          "value": -0.05,
+          "file_anim": "position_x\\Thigh_Pos_X_m10.anim"
+        }
+      ]
+    },
+    "position_y": {
+      "category": "position",
+      "axis": "Y",
+      "unit": "meters",
+      "snap": 0.005,
+      "steps": [
+        {
+          "name": "Thigh_Pos_Y_p01",
+          "step_index": 1,
+          "value": 0.005,
+          "file_anim": "position_y\\Thigh_Pos_Y_p01.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p02",
+          "step_index": 2,
+          "value": 0.01,
+          "file_anim": "position_y\\Thigh_Pos_Y_p02.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p03",
+          "step_index": 3,
+          "value": 0.015,
+          "file_anim": "position_y\\Thigh_Pos_Y_p03.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p04",
+          "step_index": 4,
+          "value": 0.02,
+          "file_anim": "position_y\\Thigh_Pos_Y_p04.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p05",
+          "step_index": 5,
+          "value": 0.025,
+          "file_anim": "position_y\\Thigh_Pos_Y_p05.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p06",
+          "step_index": 6,
+          "value": 0.03,
+          "file_anim": "position_y\\Thigh_Pos_Y_p06.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p07",
+          "step_index": 7,
+          "value": 0.035,
+          "file_anim": "position_y\\Thigh_Pos_Y_p07.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p08",
+          "step_index": 8,
+          "value": 0.04,
+          "file_anim": "position_y\\Thigh_Pos_Y_p08.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p09",
+          "step_index": 9,
+          "value": 0.045,
+          "file_anim": "position_y\\Thigh_Pos_Y_p09.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_p10",
+          "step_index": 10,
+          "value": 0.05,
+          "file_anim": "position_y\\Thigh_Pos_Y_p10.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m01",
+          "step_index": -1,
+          "value": -0.005,
+          "file_anim": "position_y\\Thigh_Pos_Y_m01.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m02",
+          "step_index": -2,
+          "value": -0.01,
+          "file_anim": "position_y\\Thigh_Pos_Y_m02.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m03",
+          "step_index": -3,
+          "value": -0.015,
+          "file_anim": "position_y\\Thigh_Pos_Y_m03.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m04",
+          "step_index": -4,
+          "value": -0.02,
+          "file_anim": "position_y\\Thigh_Pos_Y_m04.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m05",
+          "step_index": -5,
+          "value": -0.025,
+          "file_anim": "position_y\\Thigh_Pos_Y_m05.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m06",
+          "step_index": -6,
+          "value": -0.03,
+          "file_anim": "position_y\\Thigh_Pos_Y_m06.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m07",
+          "step_index": -7,
+          "value": -0.035,
+          "file_anim": "position_y\\Thigh_Pos_Y_m07.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m08",
+          "step_index": -8,
+          "value": -0.04,
+          "file_anim": "position_y\\Thigh_Pos_Y_m08.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m09",
+          "step_index": -9,
+          "value": -0.045,
+          "file_anim": "position_y\\Thigh_Pos_Y_m09.anim"
+        },
+        {
+          "name": "Thigh_Pos_Y_m10",
+          "step_index": -10,
+          "value": -0.05,
+          "file_anim": "position_y\\Thigh_Pos_Y_m10.anim"
+        }
+      ]
+    },
+    "position_z": {
+      "category": "position",
+      "axis": "Z",
+      "unit": "meters",
+      "snap": 0.005,
+      "steps": [
+        {
+          "name": "Thigh_Pos_Z_p01",
+          "step_index": 1,
+          "value": 0.005,
+          "file_anim": "position_z\\Thigh_Pos_Z_p01.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p02",
+          "step_index": 2,
+          "value": 0.01,
+          "file_anim": "position_z\\Thigh_Pos_Z_p02.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p03",
+          "step_index": 3,
+          "value": 0.015,
+          "file_anim": "position_z\\Thigh_Pos_Z_p03.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p04",
+          "step_index": 4,
+          "value": 0.02,
+          "file_anim": "position_z\\Thigh_Pos_Z_p04.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p05",
+          "step_index": 5,
+          "value": 0.025,
+          "file_anim": "position_z\\Thigh_Pos_Z_p05.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p06",
+          "step_index": 6,
+          "value": 0.03,
+          "file_anim": "position_z\\Thigh_Pos_Z_p06.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p07",
+          "step_index": 7,
+          "value": 0.035,
+          "file_anim": "position_z\\Thigh_Pos_Z_p07.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p08",
+          "step_index": 8,
+          "value": 0.04,
+          "file_anim": "position_z\\Thigh_Pos_Z_p08.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p09",
+          "step_index": 9,
+          "value": 0.045,
+          "file_anim": "position_z\\Thigh_Pos_Z_p09.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_p10",
+          "step_index": 10,
+          "value": 0.05,
+          "file_anim": "position_z\\Thigh_Pos_Z_p10.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m01",
+          "step_index": -1,
+          "value": -0.005,
+          "file_anim": "position_z\\Thigh_Pos_Z_m01.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m02",
+          "step_index": -2,
+          "value": -0.01,
+          "file_anim": "position_z\\Thigh_Pos_Z_m02.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m03",
+          "step_index": -3,
+          "value": -0.015,
+          "file_anim": "position_z\\Thigh_Pos_Z_m03.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m04",
+          "step_index": -4,
+          "value": -0.02,
+          "file_anim": "position_z\\Thigh_Pos_Z_m04.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m05",
+          "step_index": -5,
+          "value": -0.025,
+          "file_anim": "position_z\\Thigh_Pos_Z_m05.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m06",
+          "step_index": -6,
+          "value": -0.03,
+          "file_anim": "position_z\\Thigh_Pos_Z_m06.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m07",
+          "step_index": -7,
+          "value": -0.035,
+          "file_anim": "position_z\\Thigh_Pos_Z_m07.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m08",
+          "step_index": -8,
+          "value": -0.04,
+          "file_anim": "position_z\\Thigh_Pos_Z_m08.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m09",
+          "step_index": -9,
+          "value": -0.045,
+          "file_anim": "position_z\\Thigh_Pos_Z_m09.anim"
+        },
+        {
+          "name": "Thigh_Pos_Z_m10",
+          "step_index": -10,
+          "value": -0.05,
+          "file_anim": "position_z\\Thigh_Pos_Z_m10.anim"
+        }
+      ]
+    },
+    "rotation_x": {
+      "category": "rotation",
+      "axis": "X",
+      "unit": "degrees",
+      "snap": 5.0,
+      "steps": [
+        {
+          "name": "Thigh_Rot_X_p01",
+          "step_index": 1,
+          "value": 5.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p01.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p01.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p02",
+          "step_index": 2,
+          "value": 10.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p02.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p02.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p03",
+          "step_index": 3,
+          "value": 15.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p03.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p03.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p04",
+          "step_index": 4,
+          "value": 20.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p04.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p04.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p05",
+          "step_index": 5,
+          "value": 25.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p05.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p05.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p06",
+          "step_index": 6,
+          "value": 30.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p06.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p06.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p07",
+          "step_index": 7,
+          "value": 35.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p07.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p07.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p08",
+          "step_index": 8,
+          "value": 40.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p08.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p08.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p09",
+          "step_index": 9,
+          "value": 45.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p09.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p09.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_p10",
+          "step_index": 10,
+          "value": 50.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_p10.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_p10.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m01",
+          "step_index": -1,
+          "value": -5.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m01.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m01.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m02",
+          "step_index": -2,
+          "value": -10.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m02.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m02.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m03",
+          "step_index": -3,
+          "value": -15.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m03.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m03.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m04",
+          "step_index": -4,
+          "value": -20.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m04.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m04.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m05",
+          "step_index": -5,
+          "value": -25.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m05.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m05.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m06",
+          "step_index": -6,
+          "value": -30.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m06.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m06.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m07",
+          "step_index": -7,
+          "value": -35.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m07.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m07.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m08",
+          "step_index": -8,
+          "value": -40.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m08.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m08.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m09",
+          "step_index": -9,
+          "value": -45.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m09.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m09.bvh"
+        },
+        {
+          "name": "Thigh_Rot_X_m10",
+          "step_index": -10,
+          "value": -50.0,
+          "file_anim": "rotation_x\\Thigh_Rot_X_m10.anim",
+          "file_bvh": "rotation_x\\Thigh_Rot_X_m10.bvh"
+        }
+      ]
+    },
+    "rotation_y": {
+      "category": "rotation",
+      "axis": "Y",
+      "unit": "degrees",
+      "snap": 5.0,
+      "steps": [
+        {
+          "name": "Thigh_Rot_Y_p01",
+          "step_index": 1,
+          "value": 5.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p01.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p01.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p02",
+          "step_index": 2,
+          "value": 10.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p02.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p02.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p03",
+          "step_index": 3,
+          "value": 15.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p03.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p03.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p04",
+          "step_index": 4,
+          "value": 20.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p04.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p04.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p05",
+          "step_index": 5,
+          "value": 25.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p05.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p05.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p06",
+          "step_index": 6,
+          "value": 30.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p06.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p06.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p07",
+          "step_index": 7,
+          "value": 35.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p07.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p07.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p08",
+          "step_index": 8,
+          "value": 40.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p08.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p08.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p09",
+          "step_index": 9,
+          "value": 45.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p09.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p09.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_p10",
+          "step_index": 10,
+          "value": 50.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_p10.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_p10.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m01",
+          "step_index": -1,
+          "value": -5.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m01.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m01.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m02",
+          "step_index": -2,
+          "value": -10.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m02.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m02.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m03",
+          "step_index": -3,
+          "value": -15.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m03.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m03.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m04",
+          "step_index": -4,
+          "value": -20.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m04.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m04.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m05",
+          "step_index": -5,
+          "value": -25.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m05.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m05.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m06",
+          "step_index": -6,
+          "value": -30.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m06.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m06.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m07",
+          "step_index": -7,
+          "value": -35.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m07.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m07.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m08",
+          "step_index": -8,
+          "value": -40.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m08.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m08.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m09",
+          "step_index": -9,
+          "value": -45.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m09.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m09.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Y_m10",
+          "step_index": -10,
+          "value": -50.0,
+          "file_anim": "rotation_y\\Thigh_Rot_Y_m10.anim",
+          "file_bvh": "rotation_y\\Thigh_Rot_Y_m10.bvh"
+        }
+      ]
+    },
+    "rotation_z": {
+      "category": "rotation",
+      "axis": "Z",
+      "unit": "degrees",
+      "snap": 5.0,
+      "steps": [
+        {
+          "name": "Thigh_Rot_Z_p01",
+          "step_index": 1,
+          "value": 5.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p01.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p01.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p02",
+          "step_index": 2,
+          "value": 10.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p02.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p02.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p03",
+          "step_index": 3,
+          "value": 15.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p03.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p03.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p04",
+          "step_index": 4,
+          "value": 20.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p04.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p04.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p05",
+          "step_index": 5,
+          "value": 25.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p05.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p05.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p06",
+          "step_index": 6,
+          "value": 30.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p06.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p06.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p07",
+          "step_index": 7,
+          "value": 35.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p07.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p07.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p08",
+          "step_index": 8,
+          "value": 40.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p08.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p08.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p09",
+          "step_index": 9,
+          "value": 45.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p09.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p09.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_p10",
+          "step_index": 10,
+          "value": 50.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_p10.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_p10.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m01",
+          "step_index": -1,
+          "value": -5.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m01.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m01.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m02",
+          "step_index": -2,
+          "value": -10.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m02.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m02.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m03",
+          "step_index": -3,
+          "value": -15.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m03.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m03.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m04",
+          "step_index": -4,
+          "value": -20.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m04.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m04.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m05",
+          "step_index": -5,
+          "value": -25.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m05.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m05.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m06",
+          "step_index": -6,
+          "value": -30.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m06.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m06.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m07",
+          "step_index": -7,
+          "value": -35.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m07.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m07.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m08",
+          "step_index": -8,
+          "value": -40.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m08.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m08.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m09",
+          "step_index": -9,
+          "value": -45.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m09.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m09.bvh"
+        },
+        {
+          "name": "Thigh_Rot_Z_m10",
+          "step_index": -10,
+          "value": -50.0,
+          "file_anim": "rotation_z\\Thigh_Rot_Z_m10.anim",
+          "file_bvh": "rotation_z\\Thigh_Rot_Z_m10.bvh"
+        }
+      ]
+    },
+    "scale_vol": {
+      "category": "scale",
+      "axis": "Vol",
+      "unit": "meters",
+      "snap": 0.005,
+      "steps": [
+        {
+          "name": "Thigh_Sca_Vol_p01",
+          "step_index": 1,
+          "value": 0.005,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p01.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p02",
+          "step_index": 2,
+          "value": 0.01,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p02.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p03",
+          "step_index": 3,
+          "value": 0.015,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p03.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p04",
+          "step_index": 4,
+          "value": 0.02,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p04.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p05",
+          "step_index": 5,
+          "value": 0.025,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p05.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p06",
+          "step_index": 6,
+          "value": 0.03,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p06.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p07",
+          "step_index": 7,
+          "value": 0.035,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p07.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p08",
+          "step_index": 8,
+          "value": 0.04,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p08.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p09",
+          "step_index": 9,
+          "value": 0.045,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p09.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_p10",
+          "step_index": 10,
+          "value": 0.05,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_p10.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m01",
+          "step_index": -1,
+          "value": -0.005,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m01.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m02",
+          "step_index": -2,
+          "value": -0.01,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m02.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m03",
+          "step_index": -3,
+          "value": -0.015,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m03.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m04",
+          "step_index": -4,
+          "value": -0.02,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m04.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m05",
+          "step_index": -5,
+          "value": -0.025,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m05.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m06",
+          "step_index": -6,
+          "value": -0.03,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m06.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m07",
+          "step_index": -7,
+          "value": -0.035,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m07.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m08",
+          "step_index": -8,
+          "value": -0.04,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m08.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m09",
+          "step_index": -9,
+          "value": -0.045,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m09.anim"
+        },
+        {
+          "name": "Thigh_Sca_Vol_m10",
+          "step_index": -10,
+          "value": -0.05,
+          "file_anim": "scale_volume\\Thigh_Sca_Vol_m10.anim"
+        }
+      ]
+    },
+    "scale_len": {
+      "category": "scale",
+      "axis": "Len",
+      "unit": "meters",
+      "snap": 0.005,
+      "steps": [
+        {
+          "name": "Thigh_Sca_Len_p01",
+          "step_index": 1,
+          "value": 0.005,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p01.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p02",
+          "step_index": 2,
+          "value": 0.01,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p02.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p03",
+          "step_index": 3,
+          "value": 0.015,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p03.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p04",
+          "step_index": 4,
+          "value": 0.02,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p04.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p05",
+          "step_index": 5,
+          "value": 0.025,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p05.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p06",
+          "step_index": 6,
+          "value": 0.03,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p06.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p07",
+          "step_index": 7,
+          "value": 0.035,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p07.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p08",
+          "step_index": 8,
+          "value": 0.04,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p08.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p09",
+          "step_index": 9,
+          "value": 0.045,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p09.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_p10",
+          "step_index": 10,
+          "value": 0.05,
+          "file_anim": "scale_length\\Thigh_Sca_Len_p10.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m01",
+          "step_index": -1,
+          "value": -0.005,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m01.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m02",
+          "step_index": -2,
+          "value": -0.01,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m02.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m03",
+          "step_index": -3,
+          "value": -0.015,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m03.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m04",
+          "step_index": -4,
+          "value": -0.02,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m04.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m05",
+          "step_index": -5,
+          "value": -0.025,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m05.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m06",
+          "step_index": -6,
+          "value": -0.03,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m06.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m07",
+          "step_index": -7,
+          "value": -0.035,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m07.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m08",
+          "step_index": -8,
+          "value": -0.04,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m08.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m09",
+          "step_index": -9,
+          "value": -0.045,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m09.anim"
+        },
+        {
+          "name": "Thigh_Sca_Len_m10",
+          "step_index": -10,
+          "value": -0.05,
+          "file_anim": "scale_length\\Thigh_Sca_Len_m10.anim"
+        }
+      ]
+    }
+  }
+}

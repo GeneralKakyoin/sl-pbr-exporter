@@ -43,14 +43,11 @@ class ChannelSpec:
     snap_default: float
 
 
-# Definition of channels for Thighs
+# Definition of safe deformation channels for Thighs (No rotation to preserve AO walking/standing locomotion)
 THIGH_CHANNELS: List[ChannelSpec] = [
     ChannelSpec("position", "X", "position_x", "meters", 0.005),       # Anterior / Posterior (5mm / step)
     ChannelSpec("position", "Y", "position_y", "meters", 0.005),       # Lateral / Thigh Gap (5mm / step)
     ChannelSpec("position", "Z", "position_z", "meters", 0.005),       # Vertical / Height (5mm / step)
-    ChannelSpec("rotation", "X", "rotation_x", "degrees", 5.0),        # Roll / Tilt (5 deg / step)
-    ChannelSpec("rotation", "Y", "rotation_y", "degrees", 5.0),        # Pitch / Swing (5 deg / step)
-    ChannelSpec("rotation", "Z", "rotation_z", "degrees", 5.0),        # Yaw / Turn-out (5 deg / step)
     ChannelSpec("scale", "Vol", "scale_volume", "meters", 0.005),      # Fitted Mesh Thickness / Volume
     ChannelSpec("scale", "Len", "scale_length", "meters", 0.005),      # Thigh Length (Knee offset)
 ]
@@ -353,12 +350,11 @@ integer gListener;
 key gOwner;
 
 // Track active animation per channel
-// Channels: 0:PosX, 1:PosY, 2:PosZ, 3:RotX, 4:RotY, 5:RotZ, 6:ScaleVol, 7:ScaleLen
-list gActiveAnims = ["", "", "", "", "", "", "", ""];
-list gStepIndices = [0, 0, 0, 0, 0, 0, 0, 0];
+// Channels: 0:PosX, 1:PosY, 2:PosZ, 3:ScaleVol, 4:ScaleLen
+list gActiveAnims = ["", "", "", "", ""];
+list gStepIndices = [0, 0, 0, 0, 0];
 list gChannelNames = [
     "Pos_X", "Pos_Y", "Pos_Z",
-    "Rot_X", "Rot_Y", "Rot_Z",
     "Scale_Vol", "Scale_Len"
 ];
 
@@ -406,14 +402,14 @@ setChannelStep(integer ch_idx, integer new_step) {
 
 resetAll() {
     integer i;
-    for (i = 0; i < 8; ++i) {
+    for (i = 0; i < 5; ++i) {
         string anim = llList2String(gActiveAnims, i);
         if (anim != "" && llGetInventoryType(anim) == INVENTORY_ANIMATION) {
             llStopAnimation(anim);
         }
     }
-    gActiveAnims = ["", "", "", "", "", "", "", ""];
-    gStepIndices = [0, 0, 0, 0, 0, 0, 0, 0];
+    gActiveAnims = ["", "", "", "", ""];
+    gStepIndices = [0, 0, 0, 0, 0];
     llOwnerSay("All deformer channels reset to skeleton default.");
 }
 
@@ -437,7 +433,6 @@ showChannelMenu() {
     string text = "\\nSelect Deformer Channel to Adjust:";
     list buttons = [
         "Pos_X", "Pos_Y", "Pos_Z",
-        "Rot_X", "Rot_Y", "Rot_Z",
         "Scale_Vol", "Scale_Len", "<< Back"
     ];
     llDialog(gOwner, text, buttons, CHANNEL_DIALOG);
