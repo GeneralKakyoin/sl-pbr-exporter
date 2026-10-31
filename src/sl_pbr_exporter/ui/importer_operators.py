@@ -582,10 +582,13 @@ class SL_OT_TransferWeights(Operator):
 
     @classmethod
     def poll(cls, context):
-        if not context.active_object or context.active_object.type != "MESH":
-            return False
         body = find_body_mesh(context.scene)
-        return body is not None and context.active_object != body
+        if not body:
+            return False
+        targets = [o for o in context.selected_objects if o.type == "MESH" and o != body]
+        if not targets and context.active_object and context.active_object.type == "MESH" and context.active_object != body:
+            targets = [context.active_object]
+        return len(targets) > 0
 
     def invoke(self, context, event):
         props = getattr(context.scene, "sl_importer", None)
@@ -595,43 +598,75 @@ class SL_OT_TransferWeights(Operator):
 
     def execute(self, context):
         ensure_object_mode()
-        active_mesh = context.active_object
         body = find_body_mesh(context.scene)
 
         if not body:
             self.report({"ERROR"}, "Avatar body mesh not found in current scene.")
             return {"CANCELLED"}
 
-        # Generate target vertex groups on active mesh if not already present
-        for src_group in body.vertex_groups:
-            if src_group.name not in active_mesh.vertex_groups:
-                active_mesh.vertex_groups.new(name=src_group.name)
+        # Collect target meshes: all selected meshes except the body mesh itself
+        target_meshes = [
+            obj for obj in context.selected_objects
+            if obj.type == "MESH" and obj != body
+        ]
+        # Fallback to active object if selected_objects was empty
+        if not target_meshes and context.active_object and context.active_object.type == "MESH" and context.active_object != body:
+            target_meshes = [context.active_object]
 
-        dt_mod = active_mesh.modifiers.new(name="WeightTransfer", type="DATA_TRANSFER")
-        dt_mod.object = body
-        dt_mod.use_vert_data = True
-        dt_mod.data_types_verts = {"VGROUP_WEIGHTS"}
-        dt_mod.vert_mapping = self.mapping_method
+        if not target_meshes:
+            self.report({"WARNING"}, "No mesh items selected to transfer weights to.")
+            return {"CANCELLED"}
 
-        context.view_layer.objects.active = active_mesh
-        bpy.ops.object.modifier_apply(modifier=dt_mod.name)
+        # Save selection state to restore at end
+        original_active = context.active_object
+        original_selected = list(context.selected_objects)
 
-        # Enforce Second Life 4-weight limit
-        if active_mesh.vertex_groups:
-            try:
-                if self.clean_threshold > 0:
-                    bpy.ops.object.vertex_group_clean(group_select_mode="ALL", limit=self.clean_threshold)
-                bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
-                bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL")
-            except Exception as e:
-                print(f"[TransferWeights] Warning during cleanup/normalize: {e}")
+        transferred_count = 0
+        for target in target_meshes:
+            # Generate target vertex groups on target mesh if not already present
+            for src_group in body.vertex_groups:
+                if src_group.name not in target.vertex_groups:
+                    target.vertex_groups.new(name=src_group.name)
 
-        self.report({"INFO"}, f"Transferred weights from '{body.name}' ({self.mapping_method}) to '{active_mesh.name}' (max 4 weights/vert).")
+            dt_mod = target.modifiers.new(name="WeightTransfer", type="DATA_TRANSFER")
+            dt_mod.object = body
+            dt_mod.use_vert_data = True
+            dt_mod.data_types_verts = {"VGROUP_WEIGHTS"}
+            dt_mod.vert_mapping = self.mapping_method
+
+            context.view_layer.objects.active = target
+            bpy.ops.object.modifier_apply(modifier=dt_mod.name)
+
+            # Enforce Second Life 4-weight limit
+            if target.vertex_groups:
+                try:
+                    if self.clean_threshold > 0:
+                        bpy.ops.object.vertex_group_clean(group_select_mode="ALL", limit=self.clean_threshold)
+                    bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
+                    bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL")
+                except Exception as e:
+                    print(f"[TransferWeights] Warning during cleanup/normalize on '{target.name}': {e}")
+
+            transferred_count += 1
+
+        # Restore original selection state
+        for obj in original_selected:
+            if obj and obj.name in context.scene.objects:
+                obj.select_set(True)
+        if original_active and original_active.name in context.scene.objects:
+            context.view_layer.objects.active = original_active
+
+        if transferred_count == 1:
+            self.report({"INFO"}, f"Transferred weights from '{body.name}' ({self.mapping_method}) to '{target_meshes[0].name}' (max 4 weights/vert).")
+        else:
+            names = ", ".join(f"'{m.name}'" for m in target_meshes[:3])
+            more = f" and {transferred_count - 3} more" if transferred_count > 3 else ""
+            self.report({"INFO"}, f"Transferred weights from '{body.name}' ({self.mapping_method}) to {transferred_count} items ({names}{more}).")
         return {"FINISHED"}
 
 
 class SL_OT_AlignToDevkit(Operator):
-    """Rotate the selected item -90 degrees around Z to align with the Avastar skeleton."""
+    """Rotate the selected item(s) -90 degrees around Z to align with the Avastar skeleton."""
     bl_idname = "sl_suite.align_to_devkit"
     bl_label = "Rotate -90° (Align with Body)"
     bl_description = "Rotate mesh -90° around Z to align Second Life coordinates to Avastar"
@@ -639,11 +674,18 @@ class SL_OT_AlignToDevkit(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.active_object and context.active_object.type == "MESH"
+        return any(o.type == "MESH" for o in context.selected_objects) or (context.active_object and context.active_object.type == "MESH")
 
     def execute(self, context):
-        align_item_to_devkit(context.active_object)
-        self.report({"INFO"}, f"Rotated '{context.active_object.name}' -90° to align with Avastar.")
+        target_meshes = [o for o in context.selected_objects if o.type == "MESH"]
+        if not target_meshes and context.active_object and context.active_object.type == "MESH":
+            target_meshes = [context.active_object]
+        for mesh_obj in target_meshes:
+            align_item_to_devkit(mesh_obj)
+        if len(target_meshes) == 1:
+            self.report({"INFO"}, f"Rotated '{target_meshes[0].name}' -90° to align with Avastar.")
+        else:
+            self.report({"INFO"}, f"Rotated {len(target_meshes)} items -90° to align with Avastar.")
         return {"FINISHED"}
 
 

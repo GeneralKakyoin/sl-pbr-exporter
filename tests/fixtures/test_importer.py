@@ -496,6 +496,44 @@ class TestImporter(unittest.TestCase):
         for m in (body_m, item_m):
             bpy.data.meshes.remove(m, do_unlink=True)
 
+    def test_transfer_weights_multiple_items(self):
+        """Verify SL_OT_TransferWeights transfers weights to all selected meshes at once."""
+        body_m = bpy.data.meshes.new("MultiBodyData")
+        body_m.from_pydata([(0, 0, 0.2 + z * 0.02) for z in range(50)], [], [])
+        body_obj = bpy.data.objects.new("Multi_Body", body_m)
+        bpy.context.scene.collection.objects.link(body_obj)
+        for bname in ("mPelvis", "mThighLeft", "mThighRight"):
+            vg = body_obj.vertex_groups.new(name=bname)
+            vg.add(list(range(50)), 0.75, 'REPLACE')
+
+        item1_m = bpy.data.meshes.new("Band1Data")
+        item1_m.from_pydata([(0, 0, 0.5), (0.1, 0, 0.5)], [], [])
+        item1_obj = bpy.data.objects.new("GatherBand", item1_m)
+        bpy.context.scene.collection.objects.link(item1_obj)
+
+        item2_m = bpy.data.meshes.new("Band2Data")
+        item2_m.from_pydata([(0, 0, 0.6), (0.1, 0, 0.6)], [], [])
+        item2_obj = bpy.data.objects.new("LegStrap", item2_m)
+        bpy.context.scene.collection.objects.link(item2_obj)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        item1_obj.select_set(True)
+        item2_obj.select_set(True)
+        bpy.context.view_layer.objects.active = item2_obj
+
+        res = bpy.ops.sl_suite.transfer_weights()
+        self.assertEqual(res, {"FINISHED"})
+
+        self.assertIn("mPelvis", [g.name for g in item1_obj.vertex_groups])
+        self.assertIn("mThighLeft", [g.name for g in item1_obj.vertex_groups])
+        self.assertIn("mPelvis", [g.name for g in item2_obj.vertex_groups])
+        self.assertIn("mThighLeft", [g.name for g in item2_obj.vertex_groups])
+
+        for o in (body_obj, item1_obj, item2_obj):
+            bpy.data.objects.remove(o, do_unlink=True)
+        for m in (body_m, item1_m, item2_m):
+            bpy.data.meshes.remove(m, do_unlink=True)
+
     def test_append_devkit_armature_only(self):
         """Verify append_devkit_from_blend with load_body=False imports only the armature without body meshes."""
         from sl_pbr_exporter.importer.devkit_binder import append_devkit_from_blend
