@@ -5,8 +5,8 @@ Verifies:
 - Float32 to uint16 quantization precision within SL error bounds
 - Quaternion compression (LLQuaternion::packToVector3)
 - Modular channel isolation (Position, Rotation, Scale independence)
-- Symmetrical bilateral joint transformations for Thighs
-- Batch generation and manifest integrity
+- Symmetrical bilateral joint transformations for all 7 anatomical regions
+- Master multi-region batch generation and manifest integrity
 """
 
 import math
@@ -23,7 +23,7 @@ from sl_pbr_exporter.core.anim_writer import (
     u16_to_f32,
     vec3_to_quat,
 )
-from sl_pbr_exporter.core.deformer_anim_generator import DeformerAnimGenerator
+from sl_pbr_exporter.core.deformer_anim_generator import DeformerAnimGenerator, REGIONS_CONFIG
 
 
 class TestAnimGenerator(unittest.TestCase):
@@ -166,6 +166,64 @@ class TestAnimGenerator(unittest.TestCase):
         self.assertIn("Frames: 2", bvh_text)
         self.assertIn("Frame Time: 0.033333", bvh_text)
 
+    def test_all_7_regions_joint_transforms(self):
+        """Verify joint transforms across all 16 channels in 7 anatomical regions."""
+        generator = DeformerAnimGenerator(region="all", num_steps=2)
+
+        total_channels = 0
+        for reg_name, channels in REGIONS_CONFIG.items():
+            for ch in channels:
+                total_channels += 1
+                joints, bvh_rots = generator._build_joint_transforms(reg_name, ch.name, 0.020)
+                self.assertGreater(len(joints), 0, f"Channel {ch.name} produced 0 joints!")
+
+                if ch.category in ("position", "scale"):
+                    for j in joints:
+                        self.assertEqual(len(j["rot_keys"]), 0, f"{ch.name} must have 0 rot keys!")
+                        self.assertEqual(len(j["pos_keys"]), 2, f"{ch.name} must have 2 pos keys!")
+                elif ch.category == "rotation":
+                    for j in joints:
+                        self.assertEqual(len(j["pos_keys"]), 0, f"{ch.name} must have 0 pos keys!")
+                        self.assertEqual(len(j["rot_keys"]), 2, f"{ch.name} must have 2 rot keys!")
+                    self.assertIn("mTorso", bvh_rots)
+
+        self.assertEqual(total_channels, 16, "Master configuration must define exactly 16 channels.")
+
+    def test_butt_lift_and_pushup_diagonal_vectors(self):
+        """Verify 45-degree diagonal shelf projection for Butt_Lift and Breast_PushUp."""
+        generator = DeformerAnimGenerator(region="all")
+
+        # Butt_Lift: posterior (-X) and superior (+Z)
+        butt_joints, _ = generator._build_joint_transforms("butt", "Butt_Lift", 0.010)
+        self.assertEqual(len(butt_joints), 1)
+        self.assertEqual(butt_joints[0]["name"], "BUTT")
+        pos = butt_joints[0]["pos_keys"][0][1]
+        self.assertAlmostEqual(pos[0], -0.010 * 0.70710678, places=4)
+        self.assertAlmostEqual(pos[2], 0.010 * 0.70710678, places=4)
+
+        # Breast_PushUp: anterior (+X) and superior (+Z)
+        pec_joints, _ = generator._build_joint_transforms("breasts", "Breast_PushUp", 0.010)
+        self.assertEqual(len(pec_joints), 2)
+        pec_pos = pec_joints[0]["pos_keys"][0][1]
+        self.assertAlmostEqual(pec_pos[0], 0.010 * 0.70710678, places=4)
+        self.assertAlmostEqual(pec_pos[2], 0.010 * 0.70710678, places=4)
+
+    def test_collarbone_and_ankle_bilateral_mirroring(self):
+        """Verify bilateral medial tapering for Shoulder_Width and Ankle_Thin."""
+        generator = DeformerAnimGenerator(region="all")
+
+        # Shoulder_Width: Left moves -Y, Right moves +Y (inward)
+        sh_joints, _ = generator._build_joint_transforms("shoulders", "Shoulder_Width", 0.015)
+        self.assertEqual(len(sh_joints), 2)
+        self.assertAlmostEqual(sh_joints[0]["pos_keys"][0][1][1], -0.015)
+        self.assertAlmostEqual(sh_joints[1]["pos_keys"][0][1][1], 0.015)
+
+        # Ankle_Thin: Left moves -Y, Right moves +Y (inward)
+        ank_joints, _ = generator._build_joint_transforms("calves", "Ankle_Thin", 0.012)
+        self.assertEqual(len(ank_joints), 2)
+        self.assertAlmostEqual(ank_joints[0]["pos_keys"][0][1][1], -0.012)
+        self.assertAlmostEqual(ank_joints[1]["pos_keys"][0][1][1], 0.012)
+
     def test_batch_generator_execution(self):
         """Verify full generation pipeline produces all folders, files, and manifest."""
         temp_dir = tempfile.mkdtemp(prefix="sl_anim_test_")
@@ -187,13 +245,40 @@ class TestAnimGenerator(unittest.TestCase):
             self.assertTrue(manifest_path.exists())
 
             # Check LSL script exists
-            lsl_path = Path(temp_dir) / "modular_deformer_hud.lsl"
+            lsl_path = Path(temp_dir) / "thighs_deformer_hud.lsl"
             self.assertTrue(lsl_path.exists())
 
             # Verify a sample file
-            sample_file = Path(temp_dir) / "position_y" / "Thigh_Pos_Y_p01.anim"
+            sample_file = Path(temp_dir) / "thigh_gap" / "Thigh_Gap_p01.anim"
             self.assertTrue(sample_file.exists())
             self.assertGreater(sample_file.stat().st_size, 0)
+
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_master_all_regions_batch_generation(self):
+        """Verify master generator produces all 7 region directories and master LSL script."""
+        temp_dir = tempfile.mkdtemp(prefix="sl_anim_master_test_")
+        try:
+            generator = DeformerAnimGenerator(region="all", num_steps=2)
+            manifest = generator.generate_all(temp_dir, export_bvh=True)
+
+            # 16 channels * 4 files (2 pos, 2 neg) = 64 anim files + 4 bvh files = 68 files
+            self.assertEqual(manifest["total_files_generated"], 68)
+
+            # Check master HUD script exists
+            master_lsl = Path(temp_dir) / "master_deformer_hud.lsl"
+            self.assertTrue(master_lsl.exists())
+            with open(master_lsl, "r", encoding="utf-8") as f:
+                lsl_content = f.read()
+                self.assertIn("MASTER AVATAR DEFORMER", lsl_content)
+                self.assertIn("Thighs", lsl_content)
+                self.assertIn("Posture", lsl_content)
+
+            # Check all 7 region folders exist
+            for reg in REGIONS_CONFIG.keys():
+                reg_dir = Path(temp_dir) / reg
+                self.assertTrue(reg_dir.is_dir(), f"Region directory {reg} missing!")
 
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

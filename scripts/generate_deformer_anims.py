@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""CLI utility to generate upload-ready Second Life .anim and .bvh deformation animations."""
+"""CLI utility to generate upload-ready Second Life .anim and .bvh deformation animations.
+
+Supports all 7 Anatomical Regions (16 Independent Modular Channels):
+  1. thighs   : Thigh_Gap, Thigh_Volume, Thigh_Length
+  2. butt     : Butt_Lift, Butt_Volume
+  3. waist    : Belly_Pooch, Hip_Dips, Waist_Cinch
+  4. breasts  : Breast_Cleavage, Breast_PushUp, Breast_Volume
+  5. calves   : Calf_Girth, Ankle_Thin
+  6. shoulders: Shoulder_Width, Shoulder_Slope
+  7. posture  : Runway_Arch
+  or 'all' to generate the complete master deformation suite.
+"""
 
 from __future__ import annotations
 
@@ -13,17 +24,19 @@ CORE_DIR = PROJECT_ROOT / "src" / "sl_pbr_exporter" / "core"
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 
-from deformer_anim_generator import DeformerAnimGenerator
+from deformer_anim_generator import DeformerAnimGenerator, REGIONS_CONFIG
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Generate Second Life modular deformation animations (.anim v1.0 & .bvh)."
     )
+    valid_regions = list(REGIONS_CONFIG.keys()) + ["all"]
     parser.add_argument(
         "--region",
-        default="thighs",
-        help="Avatar body region to deform (default: thighs)."
+        default="all",
+        choices=valid_regions,
+        help="Avatar body region to deform (default: all)."
     )
     parser.add_argument(
         "--steps",
@@ -40,8 +53,8 @@ def main():
     parser.add_argument(
         "--rot-snap",
         type=float,
-        default=5.0,
-        help="Rotation snap increment in degrees (default: 5.0 deg)."
+        default=2.5,
+        help="Rotation snap increment in degrees (default: 2.5 deg)."
     )
     parser.add_argument(
         "--scale-snap",
@@ -57,8 +70,8 @@ def main():
     )
     parser.add_argument(
         "--out",
-        default="export/anims/thighs",
-        help="Target output directory (default: export/anims/thighs)."
+        default=None,
+        help="Target output directory (default: export/anims/[region])."
     )
     parser.add_argument(
         "--no-bvh",
@@ -68,12 +81,21 @@ def main():
 
     args = parser.parse_args()
 
-    out_dir = Path(args.out)
+    # Default output directory
+    if args.out:
+        out_dir = Path(args.out)
+    else:
+        if args.region == "all":
+            out_dir = PROJECT_ROOT / "export" / "anims"
+        else:
+            out_dir = PROJECT_ROOT / "export" / "anims" / args.region
+
     if not out_dir.is_absolute():
         out_dir = PROJECT_ROOT / out_dir
+
     print(f"======================================================================")
-    print(f"  Second Life Deformer Animation Generator")
-    print(f"  Region       : {args.region.title()}")
+    print(f"  Second Life Multi-Region Deformer Animation Generator")
+    print(f"  Region       : {args.region.upper()}")
     print(f"  Steps        : {args.steps} (+1 to +{args.steps}, -1 to -{args.steps})")
     print(f"  Position Snap: {args.pos_snap * 1000.0:.1f} mm ({args.pos_snap} m)")
     print(f"  Rotation Snap: {args.rot_snap:.1f} deg")
@@ -97,20 +119,26 @@ def main():
     )
 
     print(f"Successfully generated {manifest['total_files_generated']} animation files:")
+    current_reg = None
     for ch_name, ch_data in manifest["channels"].items():
+        reg = ch_data.get("region", "thighs").upper()
+        if reg != current_reg:
+            print(f"\n  [{reg}]")
+            current_reg = reg
         count = len(ch_data["steps"])
         unit = ch_data["unit"]
         snap = ch_data["snap"]
-        print(f"  - [{ch_name.upper():<14}] : {count} steps (snap: {snap} {unit})")
+        desc = ch_data.get("description", "")
+        print(f"    - {ch_data['name']:<18} : {count:2d} steps (snap: {snap} {unit}) -> {desc}")
 
     print(f"\nArtifacts:")
     print(f"  - Manifest  : {manifest['manifest_file']}")
     print(f"  - LSL Script: {manifest['lsl_script']}")
     print(f"\nSecond Life Upload Instructions:")
     print(f"  1. In Firestorm / SL Viewer, select 'Upload' -> 'Animation...'")
-    print(f"  2. Choose all the .anim files from the folders above (or bulk upload).")
-    print(f"  3. Drop the uploaded animations and 'modular_deformer_hud.lsl' into your HUD prim.")
-    print(f"  4. Attach the HUD and click to sculpt your avatar in real-time!")
+    print(f"  2. Bulk select all .anim files from the generated folders.")
+    print(f"  3. Drop the uploaded animations and the generated .lsl HUD script into your HUD prim.")
+    print(f"  4. Attach the HUD and sculpt your avatar in real time without conflicting with AOs!")
     print(f"======================================================================")
 
 
