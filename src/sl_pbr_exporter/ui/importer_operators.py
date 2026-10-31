@@ -4,7 +4,15 @@ from pathlib import Path
 import re
 from typing import Optional
 import bpy
-from bpy.props import BoolProperty, CollectionProperty, IntProperty, PointerProperty, StringProperty
+from bpy.props import (
+    BoolProperty,
+    CollectionProperty,
+    EnumProperty,
+    FloatProperty,
+    IntProperty,
+    PointerProperty,
+    StringProperty,
+)
 from bpy.types import Operator, PropertyGroup, UIList
 
 import mathutils
@@ -65,6 +73,24 @@ def update_scan_folder(self, context):
     bpy.ops.sl_suite.scan_items("EXEC_DEFAULT")
 
 
+def update_custom_shape_path(self, context):
+    """Auto-detect archetype when custom shape XML is updated."""
+    p_str = self.custom_shape_path.strip()
+    if p_str:
+        p = Path(bpy.path.abspath(p_str))
+        if p.exists() and p.is_file():
+            try:
+                data = parse_shape_xml(p)
+                if data and "archetype" in data:
+                    self.detected_custom_shape_name = data["archetype"]
+                else:
+                    self.detected_custom_shape_name = p.stem
+            except Exception:
+                self.detected_custom_shape_name = p.stem
+            return
+    self.detected_custom_shape_name = ""
+
+
 class SL_ImporterProperties(PropertyGroup):
     """Properties for Mesh & DevKit importer."""
     folder_path: StringProperty(
@@ -84,14 +110,50 @@ class SL_ImporterProperties(PropertyGroup):
 
     auto_append_devkit: BoolProperty(
         name="Auto-Append DevKit",
-        description="Automatically append Avastar rig & body if not already present in the scene",
+        description="Automatically append Avastar rig if not already present in the scene",
         default=True,
+    )
+
+    load_devkit_body: BoolProperty(
+        name="Load DevKit Body",
+        description="Load the avatar body mesh from the DevKit. Turn off to avoid loading the body mesh and bind items to the armature only",
+        default=False,
+    )
+
+    use_custom_shape: BoolProperty(
+        name="Load with Custom Shape",
+        description="Load the DevKit with a custom avatar shape XML instead of the default shape",
+        default=False,
+    )
+
+    custom_shape_path: StringProperty(
+        name="Custom Shape XML",
+        description="Path to custom Second Life shape XML file (.xml)",
+        subtype="FILE_PATH",
+        default="",
+        update=update_custom_shape_path,
+    )
+
+    detected_custom_shape_name: StringProperty(
+        name="Custom Shape",
+        default="",
     )
 
     apply_shape: BoolProperty(
         name="Apply Shape XML",
         description="Automatically apply avatar shape XML if found in the outfit folder",
         default=True,
+    )
+
+    weight_transfer_method: EnumProperty(
+        name="Weight Transfer Method",
+        description="Weight projection method when transferring weights from body to item",
+        items=[
+            ("POLYINTERP_NEAREST", "Nearest Face Interpolated (Smooth)", "Interpolate smoothly across body faces - prevents tearing, spikes, and separation"),
+            ("POLYINTERP_VNORPROJ", "Project Along Normals", "Project ray along vertex normals - ideal for tight wrap items"),
+            ("NEAREST", "Nearest Vertex (Stepped)", "Snap to single nearest body vertex"),
+        ],
+        default="POLYINTERP_NEAREST",
     )
 
     items: CollectionProperty(type=SL_ItemChecklistItem)
@@ -180,8 +242,14 @@ class SL_OT_LoadSelectedItems(Operator):
             dk_path = Path(bpy.path.abspath(props.devkit_blend_path.strip())) if props.devkit_blend_path else None
             if dk_path and dk_path.exists():
                 try:
-                    devkit_arm, devkit_body = append_devkit_from_blend(dk_path)
-                    self.report({"INFO"}, f"Appended DevKit from {dk_path.name}")
+                    devkit_arm, devkit_body = append_devkit_from_blend(
+                        dk_path,
+                        load_body=props.load_devkit_body,
+                    )
+                    if props.load_devkit_body:
+                        self.report({"INFO"}, f"Appended DevKit rig & body from {dk_path.name}")
+                    else:
+                        self.report({"INFO"}, f"Appended DevKit armature only from {dk_path.name}")
                 except Exception as e:
                     self.report({"WARNING"}, f"Could not append DevKit: {e}")
 
@@ -203,10 +271,11 @@ class SL_OT_LoadSelectedItems(Operator):
                 self.report({"ERROR"}, f"Error importing '{item.name}': {e}")
 
         # Clean devkit visibility (keep primary body visible, hide alternate cuts and widgets)
-        setup_devkit_visibility()
-
-        # Find primary body mesh universally
-        body_mesh = devkit_body or find_body_mesh(context.scene)
+        if props.load_devkit_body:
+            setup_devkit_visibility()
+            body_mesh = devkit_body or find_body_mesh(context.scene)
+        else:
+            body_mesh = None
 
         # Inactive linkset meshes (< 30 verts or all zero alpha) are auto-hidden by import_and_bind_item,
         # but run explicitly here across all meshes to ensure complete consistency.
@@ -215,7 +284,11 @@ class SL_OT_LoadSelectedItems(Operator):
         # 3. Apply Shape (Hybrid Pipeline)
         shape_path = None
         folder = Path(bpy.path.abspath(props.folder_path.strip())) if props.folder_path else None
-        if props.apply_shape and folder:
+        if props.use_custom_shape and props.custom_shape_path:
+            custom_p = Path(bpy.path.abspath(props.custom_shape_path.strip()))
+            if custom_p.exists() and custom_p.is_file():
+                shape_path = custom_p
+        if not shape_path and props.apply_shape and folder:
             shape_path = find_shape_xml(folder)
 
         if shape_path and devkit_arm:
@@ -242,7 +315,7 @@ class SL_OT_LoadSelectedItems(Operator):
                     protected_meshes.append((obj, mw, arm_mod, arm_target))
 
             # Run Avastar body & clothing shape pass: shapes rest bones, RebornBody, and all attached rigged clothing
-            if hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
+            if props.load_devkit_body and hasattr(bpy.ops, "avastar") and hasattr(bpy.ops.avastar, "import_shape"):
                 try:
                     ensure_object_mode()
                     deselect_all_objects()
@@ -324,9 +397,161 @@ class SL_OT_LoadSelectedItems(Operator):
         except Exception:
             pass
 
-        arm_label = f"'{devkit_arm.name}'" if devkit_arm else "avatar"
-        self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto {arm_label} rig with textures!")
+        if not props.load_devkit_body:
+            arm_label = f"'{devkit_arm.name}' armature (armature only)" if devkit_arm else "armature only"
+        else:
+            arm_label = f"'{devkit_arm.name}' rig & body" if devkit_arm else "avatar"
+        self.report({"INFO"}, f"Successfully loaded {len(selected)} item(s) onto {arm_label} with textures!")
         return {"FINISHED"}
+
+
+class SL_OT_ImportDevKit(Operator):
+    """Import the DevKit armature and body mesh into the active scene, optionally applying a custom shape."""
+    bl_idname = "sl_suite.import_devkit"
+    bl_label = "Import DevKit Alone"
+    bl_description = "Import DevKit rig (and optional body mesh) into scene, with option to apply a custom shape XML"
+    bl_options = {"REGISTER", "UNDO"}
+
+    devkit_blend_path: StringProperty(
+        name="DevKit .blend",
+        description="Path to DevKit .blend file (leave blank to use configured Kit .blend)",
+        default="",
+    )
+    load_body: BoolProperty(
+        name="Load DevKit Body",
+        description="Load the avatar body mesh from the DevKit. Turn off for armature only",
+        default=True,
+    )
+    use_custom_shape: BoolProperty(
+        name="Load with Custom Shape",
+        description="Apply a custom avatar shape XML when loading the DevKit",
+        default=False,
+    )
+    custom_shape_path: StringProperty(
+        name="Custom Shape XML",
+        description="Path to custom Second Life shape XML file (.xml)",
+        default="",
+    )
+
+    def execute(self, context):
+        ensure_object_mode()
+        props = context.scene.sl_importer
+
+        # Determine settings: fallback to scene properties if not explicitly overridden on operator call
+        dk_path_str = self.devkit_blend_path.strip() if self.properties.is_property_set("devkit_blend_path") and self.devkit_blend_path else props.devkit_blend_path.strip()
+        load_body = self.load_body if self.properties.is_property_set("load_body") else props.load_devkit_body
+        use_custom = self.use_custom_shape if self.properties.is_property_set("use_custom_shape") else props.use_custom_shape
+        custom_shape_str = self.custom_shape_path.strip() if self.properties.is_property_set("custom_shape_path") and self.custom_shape_path else props.custom_shape_path.strip()
+
+        dk_path = Path(bpy.path.abspath(dk_path_str)) if dk_path_str else None
+        if not dk_path or not dk_path.exists():
+            self.report({"ERROR"}, f"Please select a valid DevKit .blend file. Current path: '{dk_path_str or 'None'}'")
+            return {"CANCELLED"}
+
+        try:
+            devkit_arm, devkit_body = append_devkit_from_blend(dk_path, load_body=load_body)
+        except Exception as e:
+            self.report({"ERROR"}, f"Could not append DevKit: {e}")
+            return {"CANCELLED"}
+
+        if not devkit_arm:
+            self.report({"ERROR"}, f"No armature found in {dk_path.name}")
+            return {"CANCELLED"}
+
+        shape_applied = False
+        shape_name = ""
+        if use_custom:
+            shape_file = None
+            if custom_shape_str:
+                p = Path(bpy.path.abspath(custom_shape_str))
+                if p.exists() and p.is_file():
+                    shape_file = p
+
+            # Fallback to folder_path if custom shape not found
+            if not shape_file and props.folder_path:
+                f = Path(bpy.path.abspath(props.folder_path.strip()))
+                if f.exists():
+                    shape_file = find_shape_xml(f)
+
+            if shape_file and shape_file.exists():
+                shape_name = shape_file.name
+                try:
+                    apply_shape_xml(shape_file, devkit_arm=devkit_arm)
+                    shape_applied = True
+                except Exception as e:
+                    self.report({"WARNING"}, f"Error applying custom shape: {e}")
+            else:
+                self.report({"WARNING"}, "Load with Custom Shape is enabled, but no valid shape XML file was found.")
+
+        # Deselect everything and select newly loaded devkit objects
+        deselect_all_objects()
+        if devkit_arm:
+            devkit_arm.select_set(True)
+            context.view_layer.objects.active = devkit_arm
+        if devkit_body:
+            devkit_body.select_set(True)
+
+        try:
+            wm = getattr(context, "window_manager", None)
+            if wm:
+                for window in wm.windows:
+                    for area in window.screen.areas:
+                        if area.type == "VIEW_3D":
+                            for space in area.spaces:
+                                if space.type == "VIEW_3D":
+                                    space.shading.type = "MATERIAL"
+        except Exception:
+            pass
+
+        body_desc = f"with body '{devkit_body.name}'" if devkit_body else "(armature only)"
+        if shape_applied:
+            self.report({"INFO"}, f"Successfully imported DevKit '{devkit_arm.name}' {body_desc} with custom shape '{shape_name}'!")
+        else:
+            self.report({"INFO"}, f"Successfully imported DevKit '{devkit_arm.name}' {body_desc} (default shape)!")
+
+        return {"FINISHED"}
+
+
+class SL_OT_CreateArmatureOnlyDevKit(Operator):
+    """Extract the armature from the active DevKit .blend and save an Armature-Only .blend file."""
+    bl_idname = "sl_suite.create_armature_devkit"
+    bl_label = "Create Armature-Only DevKit"
+    bl_description = "Extract only the Avatar armature from the configured DevKit .blend and save it as a lightweight armature-only kit"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        props = context.scene.sl_importer
+        dk_path = Path(bpy.path.abspath(props.devkit_blend_path.strip())) if props.devkit_blend_path else None
+        if not dk_path or not dk_path.exists():
+            self.report({"ERROR"}, "Valid DevKit .blend path required.")
+            return {"CANCELLED"}
+
+        out_path = dk_path.parent / f"{dk_path.stem} - Armature Only.blend"
+        try:
+            import subprocess
+            py_code = (
+                "import bpy\n"
+                "from pathlib import Path\n"
+                f"src = Path(r'{dk_path}')\n"
+                f"dst = Path(r'{out_path}')\n"
+                "for o in list(bpy.data.objects): bpy.data.objects.remove(o, do_unlink=True)\n"
+                "with bpy.data.libraries.load(str(src), link=False) as (df, dt):\n"
+                "    if 'Avatar' in df.objects: dt.objects = ['Avatar']\n"
+                "    else: dt.objects = [n for n in df.objects if n not in ('Camera', 'Light')]\n"
+                "for o in dt.objects:\n"
+                "    if o and o.type == 'ARMATURE':\n"
+                "        bpy.context.scene.collection.objects.link(o)\n"
+                "        break\n"
+                "bpy.ops.wm.save_as_mainfile(filepath=str(dst))\n"
+            )
+            subprocess.run([bpy.app.binary_path, "--background", "--python-expr", py_code], check=True, capture_output=True)
+            props.devkit_blend_path = str(out_path)
+            props.load_devkit_body = False
+            self.report({"INFO"}, f"Created and selected armature-only DevKit: {out_path.name}")
+            return {"FINISHED"}
+        except Exception as e:
+            self.report({"ERROR"}, f"Failed to create armature-only DevKit: {e}")
+            return {"CANCELLED"}
 
 
 
@@ -334,8 +559,26 @@ class SL_OT_TransferWeights(Operator):
     """Transfer / Refit vertex weights from the avatar body mesh onto the active item."""
     bl_idname = "sl_suite.transfer_weights"
     bl_label = "Transfer Weights from Body"
-    bl_description = "Project vertex weights from the avatar body mesh to active item and clamp to 4 weights per vertex"
+    bl_description = "Project vertex weights from avatar body mesh to active item and clamp to 4 weights per vertex"
     bl_options = {"REGISTER", "UNDO"}
+
+    mapping_method: EnumProperty(
+        name="Method",
+        description="Weight transfer algorithm from body to mesh",
+        items=[
+            ("POLYINTERP_NEAREST", "Nearest Face Interpolated", "Smooth interpolation across body faces (best for clothing/bands)"),
+            ("POLYINTERP_VNORPROJ", "Project Along Normals", "Project ray along vertex normals (great for form-fitting shells)"),
+            ("NEAREST", "Nearest Vertex", "Copy weights directly from closest body vertex (can cause stepped/jagged deformation)"),
+        ],
+        default="POLYINTERP_NEAREST",
+    )
+    clean_threshold: FloatProperty(
+        name="Clean Threshold",
+        description="Prune tiny residual weights before limiting to 4 bones (prevents wasting SL weight slots)",
+        default=0.005,
+        min=0.0,
+        max=0.05,
+    )
 
     @classmethod
     def poll(cls, context):
@@ -343,6 +586,12 @@ class SL_OT_TransferWeights(Operator):
             return False
         body = find_body_mesh(context.scene)
         return body is not None and context.active_object != body
+
+    def invoke(self, context, event):
+        props = getattr(context.scene, "sl_importer", None)
+        if props and hasattr(props, "weight_transfer_method"):
+            self.mapping_method = props.weight_transfer_method
+        return self.execute(context)
 
     def execute(self, context):
         ensure_object_mode()
@@ -362,7 +611,7 @@ class SL_OT_TransferWeights(Operator):
         dt_mod.object = body
         dt_mod.use_vert_data = True
         dt_mod.data_types_verts = {"VGROUP_WEIGHTS"}
-        dt_mod.vert_mapping = "NEAREST"
+        dt_mod.vert_mapping = self.mapping_method
 
         context.view_layer.objects.active = active_mesh
         bpy.ops.object.modifier_apply(modifier=dt_mod.name)
@@ -370,12 +619,14 @@ class SL_OT_TransferWeights(Operator):
         # Enforce Second Life 4-weight limit
         if active_mesh.vertex_groups:
             try:
+                if self.clean_threshold > 0:
+                    bpy.ops.object.vertex_group_clean(group_select_mode="ALL", limit=self.clean_threshold)
                 bpy.ops.object.vertex_group_limit_total(group_select_mode="ALL", limit=4)
                 bpy.ops.object.vertex_group_normalize_all(group_select_mode="ALL")
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[TransferWeights] Warning during cleanup/normalize: {e}")
 
-        self.report({"INFO"}, f"Transferred weights from '{body.name}' to '{active_mesh.name}' (max 4 weights/vert).")
+        self.report({"INFO"}, f"Transferred weights from '{body.name}' ({self.mapping_method}) to '{active_mesh.name}' (max 4 weights/vert).")
         return {"FINISHED"}
 
 

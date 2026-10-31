@@ -1,8 +1,33 @@
 # Second Life Creator Suite (Mesh & PBR)
 
+[![GitHub Release](https://img.shields.io/github/v/release/GeneralKakyoin/sl-pbr-exporter?color=blue&label=Latest%20Release)](https://github.com/GeneralKakyoin/sl-pbr-exporter/releases/latest)
+[![Blender 3.6 LTS](https://img.shields.io/badge/Blender-3.6%20LTS-orange.svg)](https://github.com/GeneralKakyoin/sl-pbr-exporter/releases/latest)
+[![Blender 5.2 LTS](https://img.shields.io/badge/Blender-5.2%20LTS-blue.svg)](https://github.com/GeneralKakyoin/sl-pbr-exporter/releases/latest)
+[![Test Suite](https://img.shields.io/badge/Tests-48%20Passed-brightgreen.svg)](https://github.com/GeneralKakyoin/sl-pbr-exporter/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A unified Blender add-on and extension combining **Mesh & DevKit Import / Rigging** with automated **Cycles Baking, ORM Channel Packing, and glTF 2.0 PBR Material Export**.
 
 Built with first-class dual compatibility for **Blender 3.6 LTS** (classic add-on ecosystem) and **Blender 4.2+ / 5.2 LTS** (extension manifest system).
+
+---
+
+## 🚀 Quick Download & Install (30 Seconds)
+
+Download the pre-packaged zip for your Blender version from [Latest Releases](https://github.com/GeneralKakyoin/sl-pbr-exporter/releases/latest):
+
+| Blender Version | Package Archive | Installation Instructions |
+| :--- | :--- | :--- |
+| **Blender 3.6 LTS** | [`sl_pbr_exporter-3.6-addon.zip`](https://github.com/GeneralKakyoin/sl-pbr-exporter/releases/latest) | `Edit` $\rightarrow$ `Preferences` $\rightarrow$ `Add-ons` $\rightarrow$ `Install...` $\rightarrow$ Select ZIP. Enable **Second Life Creator Suite**. |
+| **Blender 4.2+ / 5.2 LTS** | [`sl_pbr_exporter-4.2-extension.zip`](https://github.com/GeneralKakyoin/sl-pbr-exporter/releases/latest) | `Edit` $\rightarrow$ `Preferences` $\rightarrow$ `Get Extensions` $\rightarrow$ Top right menu $\rightarrow$ `Install from Disk...` $\rightarrow$ Select ZIP. |
+
+---
+
+## 📚 Technical Documentation & Knowledge Base
+
+- **[Architecture & Knowledge Codex](docs/ARCHITECTURE_AND_KNOWLEDGE_BASE.md)**: Full mathematical equations ($S_{\text{eff}} = S_{\text{shape}} / S_{\text{bind}}$, FK trees, coordinate rotations $\mathbf{R}_z(\pm 90^\circ)$, $\Delta Z_{\text{neck}}$ seam lock), 4-way topological mesh classification, forensic analysis of past false diagnoses ("the culprit traps"), and PBR baking internals.
+- **[Disaster Recovery & Clean-Machine Manual](docs/DISASTER_RECOVERY.md)**: Zero-to-hero instructions to reconstruct the entire development and production environment from scratch on a clean machine in under 15 minutes.
+- **[Verified Bento Shape Engine Fix Record](docs/VERIFIED_BENTO_SHAPE_FIX.md)**: Forensic record and user-verified benchmarks for Bento facial mesh deformation.
 
 ---
 
@@ -142,10 +167,13 @@ Documents/
 2. Use the top toggle buttons to switch between **`[ Mesh & DevKit ]`** and **`[ PBR Material Exporter ]`**:
 
 ### Mode 1: Mesh & DevKit
-- **DevKit Status**: Shows active armature and Avastar status.
+- **DevKit Status**: Shows active armature and Avastar status. Includes options to **Auto-Append Rig**, **Load Body Mesh**, **Load with Custom Shape**, and **Create Armature-Only DevKit**.
+- **Import DevKit Alone**: Click **Import DevKit Alone** (or **Import DevKit (Custom Shape)**) to import the DevKit armature and body mesh into your scene without needing to load any outfit items.
+- **Custom Shape Toggle**: Enable **Load with Custom Shape** to pick any Second Life shape XML file (`.xml`). When enabled, the DevKit (and any loaded items) will be deformed to your custom shape. When disabled, the DevKit loads in its default neutral shape.
 - **Folder**: Select an outfit folder or single-item folder.
 - **Checklist**: Check the items you wish to load, or click **Select All**.
-- Click **Load Selected onto DevKit**.
+- **DevKit Body Toggle**: Toggle **Load DevKit Body** on or off. When disabled, the importer binds items directly to the armature only without loading the avatar body mesh or helper geometry.
+- Click **Load Selected (Armature Only)** or **Load Selected onto DevKit Body**.
 - If needed, click **Transfer Weights from Body** to refit weights.
 - Click **Export Item for SL (.dae)** to generate the final upload file.
 
@@ -168,9 +196,14 @@ Run the automated test suite across installed Blender versions:
 & "C:\Program Files\Blender Foundation\Blender 5.2\blender.exe" --background --factory-startup --python tests/run_tests.py
 ```
 
-### Packaging Release Archives
+### Packaging & Local Live Deployment
+
 ```powershell
+# Build dual distribution packages in dist/
 python scripts/build_packages.py
+
+# Build and automatically sync to active Blender 3.6 & 5.2 user directories
+python scripts/deploy_to_blender.py
 ```
 
 ---

@@ -167,8 +167,14 @@ def align_armature_to_blender_space(arm_obj: bpy.types.Object) -> None:
     deselect_all_objects()
 
 
-def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Object], Optional[bpy.types.Object]]:
+def append_devkit_from_blend(
+    blend_path: Path,
+    load_body: bool = True,
+) -> Tuple[Optional[bpy.types.Object], Optional[bpy.types.Object]]:
     """Append the DevKit armature and body mesh from a .blend file into the active scene.
+
+    If load_body is False, only the armature is appended; body meshes, cuts,
+    and helper geometry are omitted.
 
     Returns (armature_obj, body_obj).
     """
@@ -180,14 +186,20 @@ def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Objec
 
     loaded_objects = []
     with bpy.data.libraries.load(str(blend_path), link=False) as (data_from, data_to):
-        # Exclude lights and cameras, load all potential avatar objects
-        target_names = [name for name in data_from.objects if name not in ("Camera", "Light")]
-        data_to.objects = target_names
+        if not load_body and "Avatar" in data_from.objects:
+            data_to.objects = ["Avatar"]
+        else:
+            # Exclude lights and cameras, load potential avatar objects
+            target_names = [name for name in data_from.objects if name not in ("Camera", "Light")]
+            data_to.objects = target_names
 
     armature_obj = None
 
     for obj in data_to.objects:
         if not obj:
+            continue
+        if not load_body and obj.type != "ARMATURE":
+            bpy.data.objects.remove(obj, do_unlink=True)
             continue
         if obj.name not in scene.objects:
             target_coll.objects.link(obj)
@@ -196,13 +208,15 @@ def append_devkit_from_blend(blend_path: Path) -> Tuple[Optional[bpy.types.Objec
         if obj.type == "ARMATURE" and not armature_obj:
             armature_obj = obj
 
-    # Universal body mesh discovery among loaded objects
-    body_obj = find_body_mesh(scene, candidates=loaded_objects)
-    if body_obj:
-        body_obj.hide_viewport = False
-        body_obj.hide_render = False
+    body_obj = None
+    if load_body:
+        # Universal body mesh discovery among loaded objects
+        body_obj = find_body_mesh(scene, candidates=loaded_objects)
+        if body_obj:
+            body_obj.hide_viewport = False
+            body_obj.hide_render = False
 
-    setup_devkit_visibility(scene)
+        setup_devkit_visibility(scene)
 
     return armature_obj, body_obj
 

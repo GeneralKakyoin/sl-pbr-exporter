@@ -496,6 +496,190 @@ class TestImporter(unittest.TestCase):
         for m in (body_m, item_m):
             bpy.data.meshes.remove(m, do_unlink=True)
 
+    def test_append_devkit_armature_only(self):
+        """Verify append_devkit_from_blend with load_body=False imports only the armature without body meshes."""
+        from sl_pbr_exporter.importer.devkit_binder import append_devkit_from_blend
+
+        with tempfile.TemporaryDirectory() as td:
+            blend_file = Path(td) / "TestDevKit.blend"
+
+            # Create a separate blend file containing an armature and body mesh
+            temp_blend_scene_code = (
+                "import bpy\n"
+                "arm_data = bpy.data.armatures.new('AvatarData')\n"
+                "arm_obj = bpy.data.objects.new('Avatar', arm_data)\n"
+                "bpy.context.scene.collection.objects.link(arm_obj)\n"
+                "body_mesh = bpy.data.meshes.new('RebornBodyMesh')\n"
+                "body_mesh.from_pydata([(0, 0, z * 0.05) for z in range(50)], [], [])\n"
+                "body_obj = bpy.data.objects.new('RebornBody', body_mesh)\n"
+                "bpy.context.scene.collection.objects.link(body_obj)\n"
+                "for b in ('mPelvis', 'mTorso', 'mChest'): body_obj.vertex_groups.new(name=b)\n"
+                f"bpy.ops.wm.save_as_mainfile(filepath=r'{blend_file}')\n"
+            )
+            import subprocess
+            subprocess.run([bpy.app.binary_path, "--background", "--python-expr", temp_blend_scene_code], check=True, capture_output=True)
+
+            # Test appending with load_body=False
+            arm_obj, body_obj = append_devkit_from_blend(blend_file, load_body=False)
+
+            self.assertIsNotNone(arm_obj, "Armature should be appended")
+            self.assertEqual(arm_obj.name, "Avatar")
+            self.assertIsNone(body_obj, "Body mesh should NOT be appended when load_body=False")
+
+            # Check scene objects: no mesh objects should have been linked
+            mesh_objs = [o for o in bpy.context.scene.objects if o.type == 'MESH']
+            self.assertEqual(len(mesh_objs), 0, "No mesh objects should be linked into scene")
+
+            # Cleanup
+            if arm_obj:
+                bpy.data.objects.remove(arm_obj, do_unlink=True)
+
+    def test_append_devkit_with_body(self):
+        """Verify append_devkit_from_blend with load_body=True imports both armature and body mesh."""
+        from sl_pbr_exporter.importer.devkit_binder import append_devkit_from_blend
+
+        with tempfile.TemporaryDirectory() as td:
+            blend_file = Path(td) / "TestDevKitFull.blend"
+
+            temp_blend_scene_code = (
+                "import bpy\n"
+                "arm_data = bpy.data.armatures.new('AvatarData')\n"
+                "arm_obj = bpy.data.objects.new('Avatar', arm_data)\n"
+                "bpy.context.scene.collection.objects.link(arm_obj)\n"
+                "body_mesh = bpy.data.meshes.new('RebornBodyMesh')\n"
+                "body_mesh.from_pydata([(0, 0, z * 0.05) for z in range(50)], [], [])\n"
+                "body_obj = bpy.data.objects.new('RebornBody', body_mesh)\n"
+                "bpy.context.scene.collection.objects.link(body_obj)\n"
+                "for b in ('mPelvis', 'mTorso', 'mChest'): body_obj.vertex_groups.new(name=b)\n"
+                f"bpy.ops.wm.save_as_mainfile(filepath=r'{blend_file}')\n"
+            )
+            import subprocess
+            subprocess.run([bpy.app.binary_path, "--background", "--python-expr", temp_blend_scene_code], check=True, capture_output=True)
+
+            # Test appending with load_body=True
+            arm_obj, body_obj = append_devkit_from_blend(blend_file, load_body=True)
+
+            self.assertIsNotNone(arm_obj, "Armature should be appended")
+            self.assertIsNotNone(body_obj, "Body mesh should be appended when load_body=True")
+            self.assertEqual(body_obj.name, "RebornBody")
+
+            # Cleanup
+            for o in (arm_obj, body_obj):
+                if o:
+                    bpy.data.objects.remove(o, do_unlink=True)
+
+    def test_load_devkit_body_toggle_property(self):
+        """Verify load_devkit_body property exists and can be toggled on scene.sl_importer."""
+        props = bpy.context.scene.sl_importer
+        self.assertFalse(props.load_devkit_body, "load_devkit_body should default to False (armature only)")
+        props.load_devkit_body = True
+        self.assertTrue(props.load_devkit_body)
+        props.load_devkit_body = False
+        self.assertFalse(props.load_devkit_body)
+
+    def test_create_armature_only_devkit_operator_registration(self):
+        """Verify SL_OT_CreateArmatureOnlyDevKit is registered with operator bl_idname."""
+        self.assertTrue(hasattr(bpy.ops.sl_suite, "create_armature_devkit"))
+
+    def test_import_devkit_operator_registration(self):
+        """Verify SL_OT_ImportDevKit is registered with operator bl_idname."""
+        self.assertTrue(hasattr(bpy.ops.sl_suite, "import_devkit"))
+
+    def test_use_custom_shape_property_and_detection(self):
+        """Verify use_custom_shape toggle and custom_shape_path archetype auto-detection."""
+        props = bpy.context.scene.sl_importer
+        self.assertFalse(props.use_custom_shape, "use_custom_shape should default to False")
+        props.use_custom_shape = True
+        self.assertTrue(props.use_custom_shape)
+
+        xml_content = """<?xml version="1.0" encoding="US-ASCII" standalone="yes"?>
+<linden_genepool version="1.0">
+    <archetype name="MyCurvyModel">
+        <param id="105" name="breast size" display="Breast Size" value="0.750" u8="190"/>
+    </archetype>
+</linden_genepool>
+"""
+        with tempfile.NamedTemporaryFile("w", suffix="_shape.xml", delete=False, encoding="utf-8") as tf:
+            tf.write(xml_content)
+            temp_path = Path(tf.name)
+
+        try:
+            props.custom_shape_path = str(temp_path)
+            self.assertEqual(props.detected_custom_shape_name, "MyCurvyModel")
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def test_import_devkit_alone_execution(self):
+        """Verify executing bpy.ops.sl_suite.import_devkit imports DevKit alone and applies custom shape."""
+        with tempfile.TemporaryDirectory() as td:
+            blend_file = Path(td) / "StandaloneDevKit.blend"
+            shape_file = Path(td) / "Custom_shape.xml"
+
+            # Create test blend file
+            temp_blend_scene_code = (
+                "import bpy\n"
+                "arm_data = bpy.data.armatures.new('AvatarData')\n"
+                "arm_obj = bpy.data.objects.new('Avatar', arm_data)\n"
+                "bpy.context.scene.collection.objects.link(arm_obj)\n"
+                "body_mesh = bpy.data.meshes.new('RebornBodyMesh')\n"
+                "body_mesh.from_pydata([(0, 0, z * 0.05) for z in range(50)], [], [])\n"
+                "body_obj = bpy.data.objects.new('RebornBody', body_mesh)\n"
+                "bpy.context.scene.collection.objects.link(body_obj)\n"
+                "for b in ('mPelvis', 'mTorso', 'mChest'): body_obj.vertex_groups.new(name=b)\n"
+                f"bpy.ops.wm.save_as_mainfile(filepath=r'{blend_file}')\n"
+            )
+            import subprocess
+            subprocess.run([bpy.app.binary_path, "--background", "--python-expr", temp_blend_scene_code], check=True, capture_output=True)
+
+            # Create test shape file
+            shape_xml_content = """<?xml version="1.0" encoding="US-ASCII" standalone="yes"?>
+<linden_genepool version="1.0">
+    <archetype name="DevKitCustomShape">
+        <param id="33" name="height" display="Height" value="0.250" u8="160"/>
+        <param id="105" name="breast size" display="Breast Size" value="0.800" u8="204"/>
+    </archetype>
+</linden_genepool>
+"""
+            shape_file.write_text(shape_xml_content, encoding="utf-8")
+
+            # 1. Test importing devkit alone with load_body=False (armature only)
+            res = bpy.ops.sl_suite.import_devkit(
+                devkit_blend_path=str(blend_file),
+                load_body=False,
+                use_custom_shape=False,
+            )
+            self.assertEqual(res, {"FINISHED"})
+            arm = bpy.context.scene.objects.get("Avatar")
+            self.assertIsNotNone(arm, "DevKit armature must be imported")
+            body = bpy.context.scene.objects.get("RebornBody")
+            self.assertIsNone(body, "Body mesh should not be imported when load_body=False")
+
+            # Cleanup
+            bpy.data.objects.remove(arm, do_unlink=True)
+
+            # 2. Test importing devkit alone with load_body=True and use_custom_shape=True
+            res = bpy.ops.sl_suite.import_devkit(
+                devkit_blend_path=str(blend_file),
+                load_body=True,
+                use_custom_shape=True,
+                custom_shape_path=str(shape_file),
+            )
+            self.assertEqual(res, {"FINISHED"})
+            arm = bpy.context.scene.objects.get("Avatar")
+            self.assertIsNotNone(arm, "DevKit armature must be imported")
+            body = bpy.context.scene.objects.get("RebornBody")
+            self.assertIsNotNone(body, "Body mesh must be imported when load_body=True")
+
+            # Verify shape sliders are recorded in scene custom properties
+            scene = bpy.context.scene
+            self.assertEqual(scene.get("sl_shape_name"), "DevKitCustomShape")
+            self.assertAlmostEqual(scene.get("sl_shape_breast_size", 0.0), 0.800, places=2)
+
+            # Cleanup
+            for o in (arm, body):
+                if o:
+                    bpy.data.objects.remove(o, do_unlink=True)
+
 
 if __name__ == "__main__":
     unittest.main()

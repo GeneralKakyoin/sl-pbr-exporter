@@ -147,14 +147,34 @@ class SLSUITE_PT_MainPanel(Panel):
             if devkit_arm:
                 box_dk.label(text=f"Active Rig: {devkit_arm.name}", icon="CHECKMARK")
             else:
-                box_dk.label(text="No Rig in Scene (Will Auto-Append)", icon="INFO")
+                if importer_props.auto_append_devkit:
+                    status_text = "No Rig in Scene (Will Append Armature Only)" if not importer_props.load_devkit_body else "No Rig in Scene (Will Auto-Append DevKit)"
+                else:
+                    status_text = "No Rig in Scene (Will Bind to Items Armature)"
+                box_dk.label(text=status_text, icon="INFO")
 
             has_avastar = hasattr(bpy.ops, "avastar")
             av_text = "Avastar Connected" if has_avastar else "Standard Armature"
             box_dk.label(text=av_text, icon="CHECKMARK" if has_avastar else "RADIOBUT_OFF")
 
             box_dk.prop(importer_props, "devkit_blend_path", text="Kit .blend")
-            box_dk.prop(importer_props, "auto_append_devkit")
+            row_dk_toggles = box_dk.row()
+            row_dk_toggles.prop(importer_props, "auto_append_devkit", text="Auto-Append Rig")
+            row_dk_toggles.prop(importer_props, "load_devkit_body", text="Load Body Mesh")
+
+            row_shape = box_dk.row()
+            row_shape.prop(importer_props, "use_custom_shape", text="Load with Custom Shape")
+            if importer_props.use_custom_shape:
+                box_dk.prop(importer_props, "custom_shape_path", text="Custom Shape")
+                if importer_props.detected_custom_shape_name:
+                    box_dk.label(text=f"Shape: {importer_props.detected_custom_shape_name}", icon="SHAPEKEY_DATA")
+
+            row_dk_btn = box_dk.row()
+            row_dk_btn.scale_y = 1.3
+            import_btn_label = "Import DevKit (Custom Shape)" if importer_props.use_custom_shape else "Import DevKit Alone"
+            row_dk_btn.operator("sl_suite.import_devkit", text=import_btn_label, icon="IMPORT")
+
+            box_dk.operator("sl_suite.create_armature_devkit", text="Create Armature-Only DevKit", icon="ARMATURE_DATA")
 
             # 2. Outfit / Items Loading Box
             box_items = layout.box()
@@ -180,19 +200,23 @@ class SLSUITE_PT_MainPanel(Panel):
                 row_sel.operator("sl_suite.select_all_items", text="Select All", icon="CHECKBOX_HLT")
                 row_sel.operator("sl_suite.deselect_all_items", text="Deselect All", icon="CHECKBOX_DEHLT")
 
+            row_opts = box_items.row(align=True)
+            row_opts.prop(importer_props, "load_devkit_body", text="Load DevKit Body")
             if importer_props.detected_shape_name:
-                row_shape = box_items.row()
-                row_shape.label(text=f"Shape: {importer_props.detected_shape_name}", icon="USER")
-                row_shape.prop(importer_props, "apply_shape", text="Apply")
+                row_opts.prop(importer_props, "apply_shape", text=f"Apply Shape ({importer_props.detected_shape_name})")
+            else:
+                row_opts.prop(importer_props, "apply_shape", text="Apply Shape XML")
 
             row_load = box_items.row()
             row_load.scale_y = 1.4
-            row_load.operator("sl_suite.load_selected_items", text="Load Selected onto DevKit", icon="IMPORT")
+            load_label = "Load Selected onto DevKit Body" if importer_props.load_devkit_body else "Load Selected (Armature Only)"
+            row_load.operator("sl_suite.load_selected_items", text=load_label, icon="IMPORT")
 
             # 3. Fitting & Weight Tools
             box_fit = layout.box()
             box_fit.label(text="Fitting & Weight Tools", icon="TOOL_SETTINGS")
             box_fit.operator("sl_suite.align_to_devkit", text="Rotate -90° (Align with Body)", icon="DRIVER_ROTATIONAL_DIFFERENCE")
+            box_fit.prop(importer_props, "weight_transfer_method", text="")
             box_fit.operator("sl_suite.transfer_weights", text="Transfer Weights from Body", icon="MOD_VERTEX_WEIGHT")
 
             # 4. Collada Export Box
