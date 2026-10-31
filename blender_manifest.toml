@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "sl_pbr_exporter"
-version = "0.2.0"
+version = "0.2.1"
 name = "Second Life Creator Suite (Mesh & PBR)"
 tagline = "Unified Second Life suite: Mesh & DevKit batch loader, Avastar auto-binding, shape XML, and PBR Material Exporter"
 maintainer = "Antigravity"

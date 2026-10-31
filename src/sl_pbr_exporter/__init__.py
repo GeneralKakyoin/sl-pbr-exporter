@@ -6,7 +6,7 @@ Seamlessly compatible with Blender 3.6 LTS through Blender 4.2+ & 5.x Extensions
 bl_info = {
     "name": "Second Life Creator Suite (Mesh & PBR)",
     "author": "Antigravity & GeneralKakyoin",
-    "version": (0, 2, 0),
+    "version": (0, 2, 1),
     "blender": (3, 6, 0),
     "location": "View3D > Sidebar > Second Life",
     "description": "Unified Second Life suite: Mesh & DevKit batch loader, Avastar auto-binding, shape XML, and PBR Material Exporter",

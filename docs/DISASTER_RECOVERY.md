@@ -2,7 +2,7 @@
 
 **Project**: Second Life Creator Suite (`sl_pbr_exporter`)  
 **Repository**: [GeneralKakyoin/sl-pbr-exporter](https://github.com/GeneralKakyoin/sl-pbr-exporter)  
-**Version**: 0.2.0  
+**Version**: 0.2.1  
 **Target Environments**: Windows 10/11, Blender 3.6 LTS & Blender 5.2 LTS
 
 ---

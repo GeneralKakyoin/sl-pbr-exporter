@@ -3,7 +3,7 @@
 **Project**: Second Life Creator Suite (`sl_pbr_exporter`)  
 **Maintainer**: Antigravity / GeneralKakyoin  
 **Repository**: [GeneralKakyoin/sl-pbr-exporter](https://github.com/GeneralKakyoin/sl-pbr-exporter)  
-**Version**: 0.2.0  
+**Version**: 0.2.1  
 **Target Environments**: Blender 3.6 LTS (Classic Add-on), Blender 4.2+ / 5.2 LTS (Extension Manifest System)
 
 ---
