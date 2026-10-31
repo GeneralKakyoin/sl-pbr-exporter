@@ -69,6 +69,8 @@ def main():
     args = parser.parse_args()
 
     out_dir = Path(args.out)
+    if not out_dir.is_absolute():
+        out_dir = PROJECT_ROOT / out_dir
     print(f"======================================================================")
     print(f"  Second Life Deformer Animation Generator")
     print(f"  Region       : {args.region.title()}")
