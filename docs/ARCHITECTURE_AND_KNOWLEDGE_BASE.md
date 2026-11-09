@@ -20,6 +20,27 @@ This document records:
 3. **Topological Classification Engine**: The 100% name-agnostic skeleton analysis pipeline that classifies any mesh without hardcoded strings.
 4. **PBR Baking & Vectorized Packing Engine**: State-managed headless Cycles baking, zero-bake bypass, and ultra-fast NumPy ORM packing.
 5. **Universal DevKit & Visibility Engine**: Managing complex commercial avatar kits and automated Blender scene sanitation.
+6. **Modular Deformer Animation & LSL HUD Engine**: 16-bit fixed-point quantization, Second Life `.anim` binary streams, 7-region skeletal deformers, and automated HUD generation.
+
+---
+
+### 1.1. Living Document Maintenance Protocol for Contributing Agents
+
+> [!IMPORTANT]
+> **Mandatory Agent Rule**:
+> This document is not a static reference—it is a **strictly maintained living engineering codex**.
+> Whenever an agent working in this repository:
+> - Introduces new operators, tools, scripts, UI panels, or modules
+> - Formulates, modifies, or recalibrates mathematical equations or coordinate transformations
+> - Identifies and resolves subtle platform quirks, Second Life limits, or false diagnoses
+> - Modifies DevKit conventions, visibility rules, shader graphs, or packaging systems
+>
+> The agent **MUST update this document** before committing code or finishing their turn:
+> 1. **Technical Specifications**: Document the mathematical formulas, algorithms, and architectural decisions in the appropriate technical section (or add a new section if creating a new subsystem).
+> 2. **Forensic Traps**: If a misleading assumption or false solution was debunked, document it in Section 2 (*Forensic Truth vs. "False Solution" Traps*).
+> 3. **Evolution Changelog**: Add an entry to Section 9 (*Architecture Evolution & Changelog*) with date, component, summary, and justification.
+>
+> Code changes made without corresponding updates to this document will desynchronize the project knowledge base and are strictly prohibited.
 
 ---
 
@@ -204,3 +225,64 @@ The project maintains dual packaging via `scripts/build_packages.py`:
 2. `dist/sl_pbr_exporter-4.2-extension.zip`: Packages code and `blender_manifest.toml` at the archive root.
 
 Automated local deployment is managed via `scripts/deploy_to_blender.py`, syncing directly to live user directories.
+
+---
+
+## 8. Modular Deformer Animation Generator & LSL HUD System
+
+The suite provides a procedural animation engine (`src/sl_pbr_exporter/core/anim_writer.py` and `deformer_anim_generator.py`) capable of generating Second Life native binary `.anim` keyframe motion streams and BVH files for avatar body deformation.
+
+### 8.1. Second Life `.anim` Binary Format Specification (`LLKeyframeMotion`)
+Second Life binary animation streams serialize avatar skeletal transformations using 16-bit fixed-point quantization and quaternion component dropping:
+
+1. **Header Structure**:
+   - `version` (`uint16` = 1), `sub_version` (`uint16` = 0)
+   - `priority` (`int32` = 0 to 5, default 4)
+   - `duration` (`float32` in seconds)
+   - `emote_name` (`null-terminated string`)
+   - `loop_in` (`float32`), `loop_out` (`float32`), `loop` (`int32`), `ease_in` (`float32`), `ease_out` (`float32`)
+   - `hand_pose` (`uint32`), `num_joints` (`uint32`)
+
+2. **Fixed-Point Quantization Math**:
+   - **Translation**: $[-5.0, 5.0]\text{ m}$ quantized to 16-bit unsigned integers:
+     $$\text{uint16}_t = \text{round}\left(\frac{t + 5.0}{10.0} \times 65535\right)$$
+   - **Scale**: $[-0.5, 1.5]$ scale factor quantized to 16-bit unsigned integers:
+     $$\text{uint16}_s = \text{round}\left(\frac{s + 0.5}{2.0} \times 65535\right)$$
+   - **Time**: $[0.0, \text{duration}]$ mapped to uint16 $[0, 65535]$.
+
+3. **Quaternion Vector3 Compression (`packToVector3`)**:
+   Rotations are compressed by identifying the quaternion component with the maximum absolute value ($w, x, y,$ or $z$), storing its 2-bit index in the header of the first uint16, and serializing only the remaining 3 signed components quantized to uint16. The viewer reconstructs the omitted component via:
+   $$c_{\text{omitted}} = \sqrt{\max\left(0.0, 1.0 - (c_1^2 + c_2^2 + c_3^2)\right)}$$
+
+### 8.2. Master 7-Region Deformer Matrix
+The generator computes progressive 20-step deformation curves (`m10` to `m01`, `p01` to `p10`) across 7 primary avatar anatomical regions:
+
+| Region | Primary Target Bones & Collision Volumes | Deformation Channels & Mathematical Logic |
+| :--- | :--- | :--- |
+| **Thighs** | `mPelvis`, `mHipRight`, `mHipLeft`, `mKneeRight`, `mKneeLeft`, `L_UPPER_LEG`, `R_UPPER_LEG`, `BUTT` | Gap (lateral lateral translation $\pm X$), Length (vertical elongation $\pm Z$), Volume (circumference scaling around bind axis). |
+| **Butt** | `BUTT`, `mPelvis` | 45-degree diagonal shelf projection vector combining posterior translation ($+Y$) and elevation ($+Z$), lateral width, and depth. |
+| **Breasts** | `CHEST`, `mChest`, `LEFT_HANDLE`, `RIGHT_HANDLE` | Push-up lift vector ($+Z$ and $+Y$), medial cleavage convergence ($\pm X$), forward projection depth ($+Y$), and scale. |
+| **Waist** | `BELLY`, `mTorso` | Hourglass cinch (lateral contraction $-X$), anterior depth flatten ($-Y$), and vertical torso elongation. |
+| **Hips** | `mPelvis`, `mHipRight`, `mHipLeft` | Hip flare (lateral expansion $+X$) and trochanteric depression/dip smoothing. |
+| **Shoulders** | `L_CLAVICLE`, `R_CLAVICLE` | Medial clavicle depression, posture back-roll (posterior $Y$ rotation), and width. |
+| **Ankles** | `mAnkleRight`, `mAnkleLeft`, `mFootRight`, `mFootLeft` | Medial ankle thinning ($\pm X$), Achilles tendon depth narrowing, and malleolus contouring. |
+
+### 8.3. Modular Channel Isolation & LSL HUD Generation
+- **Channel Isolation**: To prevent channel clobbering in Second Life's animation mixer, translation deformers contain strictly **0 rotation keyframes**, and rotation deformers contain strictly **0 position keyframes**.
+- **Automated HUD Scripts**: The generator produces complete, ready-to-compile Linden Scripting Language (LSL) HUD scripts (`modular_deformer_hud.lsl` and `master_7region_deformer_hud.lsl`) that listen on private dialog channels, store step states, and stream the corresponding animation assets to the avatar on demand.
+- **JSON Manifest**: Emits `manifest.json` documenting every generated region, channel, step curve, bone transform, and binary file path.
+
+---
+
+## 9. Architecture Evolution & Changelog
+
+| Date | Version / Commit | Affected Components | Summary & Architectural Rationale |
+| :--- | :--- | :--- | :--- |
+| **2026-09-22** | `v0.1.0` | `core/packer.py`, `core/baker.py` | Initial PBR Material Exporter. Implemented state-managed Cycles baking with emission passthrough and vectorized NumPy ORM channel packing. |
+| **2026-09-26** | `v0.2.0` / `298bf1d` | `importer/sl_shape_engine.py` | Implemented 1:1 Second Life Bento Shape Engine with Collada bind-scale inversion ($S_{\text{eff}} = S_{\text{shape}} / S_{\text{bind}}$) and Avastar shielding. |
+| **2026-09-26** | `d79ae61`, `57262a9` | `importer/devkit_binder.py` | Restored authentic LeLutka bind matrices by prioritizing Head DAE; permanently eliminated horizontal neck scaling traps. |
+| **2026-09-27** | `be3ead9` | `importer/devkit_binder.py` | Eliminated all keyword/name heuristics in favor of 100% name-agnostic skeleton topology analysis across 7 Linden chains. |
+| **2026-10-31** | `v0.2.1` / `bc6565e` | `docs/`, `ui/importer_operators.py` | Published comprehensive Architecture Codex and Disaster Recovery Manual; implemented batch multi-mesh weight transfer and coordinate alignment. |
+| **2026-10-31** | `ba47b16`, `3e46c50` | `core/anim_writer.py`, `core/deformer_anim_generator.py` | Implemented master 7-region deformer animation generator, Second Life `.anim` binary quantization engine, and automated LSL HUD builder. |
+| **2026-11-09** | Current | `docs/`, `GEMINI.md`, `CLAUDE.md` | Enforced Living Architecture & Knowledge Base maintenance rule across all workspace guidelines; added living document maintenance protocol. |
+

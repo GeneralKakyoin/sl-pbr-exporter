@@ -33,3 +33,9 @@ Thumbs.db
 **/export/
 /bake_cache/
 /tmp/
+
+# Scratch and experiment scripts
+scratch_*
+scratch/
+scripts/EXP/
+
